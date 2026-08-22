@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import ItemCard from "../components/ItemCard";
 import EmptyState from "../components/EmptyState";
+import HomeSkeleton from "../components/HomeSkeleton";
 import { listItems, listLowestPrices, type LowestPriceInfo } from "../lib/dataClient";
 import { getLeaderboard } from "../lib/leaderboard";
 import { useAuth } from "../lib/authContext";
@@ -92,11 +93,7 @@ export default function HomeScreen() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-[124px] rounded-card bg-white/60 animate-pulse" />
-            ))}
-          </div>
+          <HomeSkeleton />
         ) : grouped.length === 0 ? (
           <EmptyState
             title="No matching items"

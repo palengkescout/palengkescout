@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Camera, X, Award, LogIn, Flame } from "lucide-react";
 import TopBar from "../components/TopBar";
 import Dropdown from "../components/Dropdown";
+import ReportSkeleton from "../components/ReportSkeleton";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
@@ -16,6 +17,7 @@ export default function ReportScreen() {
 
   const [items, setItems] = useState<Item[]>([]);
   const [markets, setMarkets] = useState<Market[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
   const [itemId, setItemId] = useState(searchParams.get("item") ?? "");
   const [marketId, setMarketId] = useState("");
   const [price, setPrice] = useState("");
@@ -33,12 +35,18 @@ export default function ReportScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       const [itemList, marketList] = await Promise.all([listItems(), listMarkets()]);
+      if (cancelled) return;
       setItems(itemList);
       setMarkets(marketList);
       if (!itemId && itemList.length) setItemId(itemList[0].id);
+      setItemsLoading(false);
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -104,7 +112,20 @@ export default function ReportScreen() {
     handlePhotoSelect(null);
   }
 
-  if (!authLoading && !user) {
+  // Still figuring out whether the person is logged in — show the form
+  // skeleton rather than briefly flashing the login gate for everyone.
+  if (authLoading) {
+    return (
+      <div className="app-shell bg-cream">
+        <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
+        <div className="app-content px-5 pt-5 pb-8">
+          <ReportSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
     return (
       <div className="app-shell bg-cream">
         <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
@@ -123,6 +144,18 @@ export default function ReportScreen() {
           >
             Log in / Sign up
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Logged in, but the item/market catalog is still loading.
+  if (itemsLoading) {
+    return (
+      <div className="app-shell bg-cream">
+        <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
+        <div className="app-content px-5 pt-5 pb-8">
+          <ReportSkeleton />
         </div>
       </div>
     );

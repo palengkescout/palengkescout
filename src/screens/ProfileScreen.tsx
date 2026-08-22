@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { LogIn, LogOut, Trophy, Award, CircleCheck, CircleAlert, Clock, Flame, Crown } from "lucide-react";
 import TopBar from "../components/TopBar";
+import ProfileSkeleton from "../components/ProfileSkeleton";
 import { useAuth } from "../lib/authContext";
 import { signOut } from "../lib/authClient";
 import { getTotalPoints } from "../lib/points";
@@ -86,6 +87,17 @@ export default function ProfileScreen() {
     );
   }
 
+  if (authLoading || loading) {
+    return (
+      <div className="app-shell bg-cream">
+        <TopBar title="Profile" subtitle="Your contributions to PalengkeScout" />
+        <div className="app-content px-5 pt-4 pb-8">
+          <ProfileSkeleton />
+        </div>
+      </div>
+    );
+  }
+
   const myRank = leaderboard.findIndex((e) => e.userId === user?.id);
   const topTen = leaderboard.slice(0, 10);
 
@@ -100,7 +112,7 @@ export default function ProfileScreen() {
 
           <div className="flex items-center gap-2 bg-palengke-gold/15 text-palengke-gold-dark rounded-pill px-4 py-2 w-fit mb-3">
             <Award size={18} strokeWidth={2} />
-            <span className="text-sm font-semibold">{loading ? "..." : points} points total</span>
+            <span className="text-sm font-semibold">{points} points total</span>
           </div>
 
           {multiplierEligible && (

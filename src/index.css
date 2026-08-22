@@ -59,4 +59,38 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Skeleton loading shimmer — a soft cream block with a light sweep
+     passing across it, used by Skeleton.tsx and everything built on it. */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background-color: theme("colors.cream.soft");
+  }
+
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-shimmer::after {
+      animation: none;
+    }
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }

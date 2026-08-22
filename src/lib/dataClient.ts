@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
-import { addPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
+import { recordPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
 import { evaluateReportStatus } from "./verification";
 import type { Item, Market, PriceReport, PriceRowData } from "../types";
 
@@ -120,7 +120,7 @@ export interface ReportPriceInput {
   price: number;
   reporterName: string;
   photoFile?: File;
-  userId?: string; // logged-in reporter's id, saved to price_reports.user_id
+  userId?: string;
 }
 
 export interface ReportPriceResult {
@@ -149,6 +149,7 @@ async function uploadPhotoToSupabase(file: File): Promise<string> {
 
 export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceResult> {
   const pointsAwarded = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
+  const reason = input.photoFile ? "report_with_photo" : "report";
 
   if (isSupabaseConfigured && supabase) {
     const { data: existing, error: existingError } = await supabase
@@ -189,7 +190,13 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
       if (upgradeError) throw upgradeError;
     }
 
-    const totalPoints = addPoints(pointsAwarded);
+    const totalPoints = await recordPoints({
+      userId: input.userId,
+      points: pointsAwarded,
+      reason,
+      priceReportId: data.id,
+    });
+
     return {
       report: {
         id: data.id,
@@ -230,6 +237,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   );
   const updated = [newReport, ...upgraded];
   saveMockReports(updated);
-  const totalPoints = addPoints(pointsAwarded);
+
+  const totalPoints = await recordPoints({ userId: input.userId, points: pointsAwarded, reason });
   return { report: newReport, pointsAwarded, totalPoints };
 }

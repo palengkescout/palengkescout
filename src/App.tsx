@@ -1,9 +1,10 @@
 import { Route, Routes, useLocation } from "react-router-dom";
-import { ClipboardList, UserRound } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import BottomNav from "./components/BottomNav";
 import HomeScreen from "./screens/HomeScreen";
 import ItemPricesScreen from "./screens/ItemPricesScreen";
 import ReportScreen from "./screens/ReportScreen";
+import ProfileScreen from "./screens/ProfileScreen";
 import PlaceholderScreen from "./screens/PlaceholderScreen";
 import { AuthProvider } from "./lib/authContext";
 
@@ -29,17 +30,7 @@ export default function App() {
                 />
               }
             />
-            <Route
-              path="/profile"
-              element={
-                <PlaceholderScreen
-                  title="Profile"
-                  subtitle="Your contributions to PalengkeScout."
-                  icon={UserRound}
-                  comingIn="Contributor badges and reputation tracking — arriving in Phase 6."
-                />
-              }
-            />
+            <Route path="/profile" element={<ProfileScreen />} />
           </Routes>
         </div>
         <BottomNav />

@@ -6,7 +6,7 @@ import Dropdown from "../components/Dropdown";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
-import type { Item, Market } from "../types";
+import type { Item, Market, PriceStatus } from "../types";
 
 export default function ReportScreen() {
   const navigate = useNavigate();
@@ -21,7 +21,11 @@ export default function ReportScreen() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ pointsAwarded: number; totalPoints: number } | null>(null);
+  const [result, setResult] = useState<{
+    pointsAwarded: number;
+    totalPoints: number;
+    status: PriceStatus;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,14 +79,14 @@ export default function ReportScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const { pointsAwarded, totalPoints } = await reportPrice({
+      const { report, pointsAwarded, totalPoints } = await reportPrice({
         itemId,
         marketId,
         price: priceValue,
         reporterName: reporterName.trim() || "Anonymous",
         photoFile: photoFile ?? undefined,
       });
-      setResult({ pointsAwarded, totalPoints });
+      setResult({ pointsAwarded, totalPoints, status: report.status });
     } catch {
       setError("Something went wrong saving your report. Please try again.");
     } finally {
@@ -105,10 +109,27 @@ export default function ReportScreen() {
             <CheckCircle2 size={30} className="text-fresh-green" strokeWidth={2} />
           </div>
           <p className="font-display text-lg text-ink mb-1.5">Price reported!</p>
-          <p className="text-ink-soft text-sm max-w-[30ch] mb-4">
-            Your report for {selectedItem?.name ?? "this item"} is marked{" "}
-            <span className="font-medium text-ink">Unverified</span> until more nearby reports confirm it.
-          </p>
+
+          {result.status === "verified" && (
+            <p className="text-ink-soft text-sm max-w-[30ch] mb-4">
+              Your report for {selectedItem?.name ?? "this item"} matched other nearby prices, so it's
+              marked <span className="font-medium text-ink">Verified</span> already.
+            </p>
+          )}
+          {result.status === "pending" && (
+            <p className="text-ink-soft text-sm max-w-[30ch] mb-4">
+              Your report for {selectedItem?.name ?? "this item"} is marked{" "}
+              <span className="font-medium text-ink">Unverified</span> until more nearby reports confirm
+              it.
+            </p>
+          )}
+          {result.status === "flagged" && (
+            <p className="text-ink-soft text-sm max-w-[30ch] mb-4">
+              Your report for {selectedItem?.name ?? "this item"} differs a lot from other prices at this
+              market, so it's been <span className="font-medium text-ink">flagged for review</span>.
+              Thanks for reporting — we'll take a closer look.
+            </p>
+          )}
 
           <div className="flex items-center gap-2 bg-palengke-gold/15 text-palengke-gold-dark rounded-pill px-4 py-2 mb-6">
             <Award size={18} strokeWidth={2} />
@@ -240,7 +261,7 @@ export default function ReportScreen() {
             className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
           />
           <p className="text-ink-faint text-xs mt-2">
-            Adding your name builds your contributor reputation.
+            Adding your name builds your contributor reputation — coming in a later update.
           </p>
         </div>
 

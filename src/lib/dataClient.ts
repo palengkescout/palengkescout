@@ -1,14 +1,16 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
 import { addPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
+import { evaluateReportStatus } from "./verification";
 import type { Item, Market, PriceReport, PriceRowData } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
 
 /**
  * Phase 1 scope: plain CRUD, no AI/anomaly logic yet (that's Phase 2).
- * Every new report is saved as "pending" until Phase 2's verification
- * logic is wired in.
+ * Every new report's status is now decided by evaluateReportStatus() —
+ * comparing it against other reports for the same item + market — rather
+ * than being hardcoded to "pending".
  *
  * Runs against Supabase when VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
  * are set. Otherwise falls back to a local mock store seeded with
@@ -171,6 +173,25 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   const pointsAwarded = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
 
   if (isSupabaseConfigured && supabase) {
+    // Pull recent reports for this exact item + market to evaluate against.
+    // NOTE: this client-side check has a small race-condition window if two
+    // people submit at the same instant. For production traffic, moving this
+    // logic into a Postgres function/trigger would close that gap — happy to
+    // draft that SQL separately if you want it.
+    const { data: existing, error: existingError } = await supabase
+      .from("price_reports")
+      .select("id, price, status")
+      .eq("item_id", input.itemId)
+      .eq("market_id", input.marketId)
+      .order("reported_at", { ascending: false })
+      .limit(50);
+    if (existingError) throw existingError;
+
+    const evaluation = evaluateReportStatus(
+      input.price,
+      (existing ?? []).map((r) => ({ id: r.id, price: Number(r.price), status: r.status }))
+    );
+
     const photoUrl = input.photoFile ? await uploadPhotoToSupabase(input.photoFile) : undefined;
     const { data, error } = await supabase
       .from("price_reports")
@@ -178,13 +199,22 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         item_id: input.itemId,
         market_id: input.marketId,
         price: input.price,
-        status: "pending",
+        status: evaluation.status,
         reporter_name: input.reporterName,
         photo_url: photoUrl,
       })
       .select()
       .single();
     if (error) throw error;
+
+    if (evaluation.upgradeReportIds.length > 0) {
+      const { error: upgradeError } = await supabase
+        .from("price_reports")
+        .update({ status: "verified" })
+        .in("id", evaluation.upgradeReportIds);
+      if (upgradeError) throw upgradeError;
+    }
+
     const totalPoints = addPoints(pointsAwarded);
     return {
       report: {
@@ -202,20 +232,29 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     };
   }
 
-  const photoUrl = input.photoFile ? await fileToDataUrl(input.photoFile) : undefined;
   const reports = loadMockReports();
+  const sameItemMarketReports = reports.filter(
+    (r) => r.itemId === input.itemId && r.marketId === input.marketId
+  );
+  const evaluation = evaluateReportStatus(input.price, sameItemMarketReports);
+
+  const photoUrl = input.photoFile ? await fileToDataUrl(input.photoFile) : undefined;
   const newReport: PriceReport = {
     id: `pr-${Date.now()}`,
     itemId: input.itemId,
     marketId: input.marketId,
     price: input.price,
-    status: "pending",
+    status: evaluation.status,
     reportedAt: new Date().toISOString(),
     reporterName: input.reporterName || "Anonymous",
     photoUrl,
     pointsAwarded,
   };
-  const updated = [newReport, ...reports];
+
+  const upgraded = reports.map((r) =>
+    evaluation.upgradeReportIds.includes(r.id) ? { ...r, status: "verified" as const } : r
+  );
+  const updated = [newReport, ...upgraded];
   saveMockReports(updated);
   const totalPoints = addPoints(pointsAwarded);
   return { report: newReport, pointsAwarded, totalPoints };

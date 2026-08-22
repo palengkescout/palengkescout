@@ -228,8 +228,11 @@ export default function ListScreen() {
                 </div>
 
                 {recommendation.aiExplanation && (
-                  <div className="flex items-start gap-2 bg-cream-soft rounded-xl p-3 mb-3">
-                    <Sparkles size={15} className="text-palengke-gold-dark shrink-0 mt-0.5" strokeWidth={2} />
+                  <div className="bg-cream-soft rounded-xl p-3 mb-3">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-2 py-0.5 mb-2">
+                      <Sparkles size={10} strokeWidth={2.6} />
+                      AI Suggestion
+                    </span>
                     <p className="text-ink-soft text-xs leading-relaxed">{recommendation.aiExplanation}</p>
                   </div>
                 )}

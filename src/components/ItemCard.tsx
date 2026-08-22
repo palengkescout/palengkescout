@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
+import { Award } from "lucide-react";
 import type { Item } from "../types";
 import { formatPeso } from "../lib/format";
 import { getItemEmoji } from "../lib/categoryIcons";
+import { POINTS_FOR_REPORT } from "../lib/points";
 
 interface ItemCardProps {
   item: Item;
@@ -24,9 +26,14 @@ export default function ItemCard({ item, lowestPrice }: ItemCardProps) {
         <p className="font-semibold text-ink text-sm leading-tight">{item.name}</p>
         <p className="text-ink-faint text-xs">per {item.unit}</p>
       </div>
-      <p className="font-display text-palengke-green text-base mt-auto">
-        {lowestPrice !== null ? `from ${formatPeso(lowestPrice)}` : "No reports yet"}
-      </p>
+      <div className="flex items-center justify-between mt-auto gap-1">
+        <p className="font-display text-palengke-green text-base">
+          {lowestPrice !== null ? `from ${formatPeso(lowestPrice)}` : "No reports yet"}
+        </p>
+        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-1.5 py-0.5 shrink-0">
+          <Award size={10} strokeWidth={2.6} />+{POINTS_FOR_REPORT}
+        </span>
+      </div>
     </Link>
   );
 }

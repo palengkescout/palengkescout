@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CirclePlus } from "lucide-react";
+import { ArrowLeft, CirclePlus, Award } from "lucide-react";
 import PriceRow from "../components/PriceRow";
 import EmptyState from "../components/EmptyState";
 import { getItem, listPricesForItem } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
+import { POINTS_FOR_REPORT } from "../lib/points";
 import type { Item, PriceRowData } from "../types";
 
 type SortMode = "price" | "recent";
@@ -112,6 +113,9 @@ export default function ItemPricesScreen() {
           >
             <CirclePlus size={18} strokeWidth={2} />
             Report a price here
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-2 py-0.5 ml-1">
+              <Award size={12} strokeWidth={2.4} />+{POINTS_FOR_REPORT}
+            </span>
           </Link>
         )}
       </div>

@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    @apply bg-cream text-ink font-body antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display text-ink;
+  }
+
+  /* Visible focus ring for keyboard/accessibility, never removed */
+  :focus-visible {
+    outline: 2px solid theme("colors.palengke.green");
+    outline-offset: 2px;
+  }
+
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Mimics a native app viewport: fills its parent, content scrolls */
+  .app-shell {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-content {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

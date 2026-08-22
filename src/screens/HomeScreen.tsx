@@ -4,10 +4,12 @@ import TopBar from "../components/TopBar";
 import ItemCard from "../components/ItemCard";
 import EmptyState from "../components/EmptyState";
 import { listItems, listLowestPrices } from "../lib/dataClient";
+import { useAuth } from "../lib/authContext";
 import type { Item } from "../types";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const { user, openAuthModal } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [lowestPrices, setLowestPrices] = useState<Record<string, number | null>>({});
   const [query, setQuery] = useState("");
@@ -43,6 +45,14 @@ export default function HomeScreen() {
     }
     return Array.from(map.entries());
   }, [filtered]);
+
+  function handleReportAction() {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    navigate("/report");
+  }
 
   return (
     <div className="app-shell bg-cream">
@@ -85,7 +95,7 @@ export default function HomeScreen() {
             title="No matching items"
             description="Try a different search, or be the first to add a price report for something new."
             actionLabel="Report a price"
-            onAction={() => navigate("/report")}
+            onAction={handleReportAction}
           />
         ) : (
           <div className="flex flex-col gap-6">

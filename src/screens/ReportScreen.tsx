@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Camera, X, Award } from "lucide-react";
+import { CheckCircle2, Camera, X, Award, LogIn } from "lucide-react";
 import TopBar from "../components/TopBar";
 import Dropdown from "../components/Dropdown";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
+import { useAuth } from "../lib/authContext";
 import type { Item, Market, PriceStatus } from "../types";
 
 export default function ReportScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user, loading: authLoading, openAuthModal } = useAuth();
 
   const [items, setItems] = useState<Item[]>([]);
   const [markets, setMarkets] = useState<Market[]>([]);
@@ -85,6 +87,7 @@ export default function ReportScreen() {
         price: priceValue,
         reporterName: reporterName.trim() || "Anonymous",
         photoFile: photoFile ?? undefined,
+        userId: user?.id,
       });
       setResult({ pointsAwarded, totalPoints, status: report.status });
     } catch {
@@ -98,6 +101,33 @@ export default function ReportScreen() {
     setResult(null);
     setPrice("");
     handlePhotoSelect(null);
+  }
+
+  // Guards direct navigation to /report while logged out (e.g. a bookmarked
+  // or typed URL), on top of the login prompts already shown by BottomNav
+  // and the other entry points.
+  if (!authLoading && !user) {
+    return (
+      <div className="app-shell bg-cream">
+        <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
+        <div className="app-content flex flex-col items-center justify-center px-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-palengke-green/10 flex items-center justify-center mb-4">
+            <LogIn size={26} className="text-palengke-green" strokeWidth={2} />
+          </div>
+          <p className="font-display text-lg text-ink mb-1.5">Log in to report a price</p>
+          <p className="text-ink-soft text-sm max-w-[30ch] mb-6">
+            Reporting prices earns you points and builds your contributor profile — log in or create an
+            account to continue.
+          </p>
+          <button
+            onClick={openAuthModal}
+            className="w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px]"
+          >
+            Log in / Sign up
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (result) {

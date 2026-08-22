@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CirclePlus, Award } from "lucide-react";
 import PriceRow from "../components/PriceRow";
 import PriceHistoryChart from "../components/PriceHistoryChart";
@@ -7,6 +7,7 @@ import EmptyState from "../components/EmptyState";
 import { getItem, listPricesForItem } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_REPORT } from "../lib/points";
+import { useAuth } from "../lib/authContext";
 import type { Item, PriceRowData } from "../types";
 
 type SortMode = "price" | "recent";
@@ -14,6 +15,7 @@ type SortMode = "price" | "recent";
 export default function ItemPricesScreen() {
   const { itemId } = useParams<{ itemId: string }>();
   const navigate = useNavigate();
+  const { user, openAuthModal } = useAuth();
   const [item, setItem] = useState<Item | null>(null);
   const [rows, setRows] = useState<PriceRowData[]>([]);
   const [sort, setSort] = useState<SortMode>("price");
@@ -43,6 +45,14 @@ export default function ItemPricesScreen() {
 
   const itemEmoji = getItemEmoji(item?.name ?? "", item?.category ?? "");
 
+  function goToReport() {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    navigate(`/report?item=${itemId}`);
+  }
+
   return (
     <div className="app-shell bg-cream">
       <header
@@ -70,7 +80,7 @@ export default function ItemPricesScreen() {
       </header>
 
       <div className="app-content px-5 pt-4 pb-6">
-        {!loading && rows.length > 1 && <PriceHistoryChart rows={rows} />}
+        {!loading && rows.length > 0 && <PriceHistoryChart rows={rows} />}
 
         {!loading && rows.length > 0 && (
           <div className="flex gap-2 mb-4">
@@ -99,7 +109,7 @@ export default function ItemPricesScreen() {
             title="No recent reports yet"
             description="Be the first to report a price for this item near you."
             actionLabel="Report a price"
-            onAction={() => navigate(`/report?item=${itemId}`)}
+            onAction={goToReport}
           />
         ) : (
           <div className="flex flex-col gap-3">
@@ -110,8 +120,8 @@ export default function ItemPricesScreen() {
         )}
 
         {!loading && rows.length > 0 && (
-          <Link
-            to={`/report?item=${itemId}`}
+          <button
+            onClick={goToReport}
             className="mt-5 flex items-center justify-center gap-2 w-full py-3.5 rounded-pill border-2 border-dashed border-palengke-green/30 text-palengke-green font-medium text-sm min-h-[48px]"
           >
             <CirclePlus size={18} strokeWidth={2} />
@@ -119,7 +129,7 @@ export default function ItemPricesScreen() {
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-2 py-0.5 ml-1">
               <Award size={12} strokeWidth={2.4} />+{POINTS_FOR_REPORT}
             </span>
-          </Link>
+          </button>
         )}
       </div>
     </div>

@@ -6,18 +6,6 @@ import type { Item, Market, PriceReport, PriceRowData } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
 
-/**
- * Phase 1 scope: plain CRUD, no AI/anomaly logic yet (that's Phase 2).
- * Every new report's status is now decided by evaluateReportStatus() —
- * comparing it against other reports for the same item + market — rather
- * than being hardcoded to "pending".
- *
- * Runs against Supabase when VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
- * are set. Otherwise falls back to a local mock store seeded with
- * realistic starting data, persisted in localStorage for the demo
- * session, so the app is fully usable with zero setup.
- */
-
 function loadMockReports(): PriceReport[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -56,7 +44,6 @@ export async function getItem(itemId: string): Promise<Item | undefined> {
   return items.find((i) => i.id === itemId);
 }
 
-/** Maps a Supabase (snake_case) price_reports row + joined market into our camelCase shape. */
 function mapSupabaseRow(row: any): PriceRowData {
   return {
     id: row.id,
@@ -78,7 +65,6 @@ function mapSupabaseRow(row: any): PriceRowData {
   };
 }
 
-/** All price rows for one item, joined with market info, newest first. */
 export async function listPricesForItem(itemId: string): Promise<PriceRowData[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
@@ -102,15 +88,6 @@ export async function listPricesForItem(itemId: string): Promise<PriceRowData[]>
     .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
 }
 
-/**
- * Lowest currently-visible price per item, used for Home screen browse
- * cards ("Tomato — from ₱82/kg"). Includes verified + pending, since
- * this is a lightweight preview, not a trust-bearing figure.
- *
- * Fetches all reports once and groups them in memory, rather than one
- * query per item — with 140+ items in the catalog, a per-item query
- * would mean 140+ round-trips on every Home screen load.
- */
 export async function listLowestPrices(): Promise<Record<string, number | null>> {
   const result: Record<string, number | null> = {};
 
@@ -142,7 +119,8 @@ export interface ReportPriceInput {
   marketId: string;
   price: number;
   reporterName: string;
-  photoFile?: File; // optional — attaching a real photo earns bonus points
+  photoFile?: File;
+  userId?: string; // logged-in reporter's id, saved to price_reports.user_id
 }
 
 export interface ReportPriceResult {
@@ -173,11 +151,6 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   const pointsAwarded = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
 
   if (isSupabaseConfigured && supabase) {
-    // Pull recent reports for this exact item + market to evaluate against.
-    // NOTE: this client-side check has a small race-condition window if two
-    // people submit at the same instant. For production traffic, moving this
-    // logic into a Postgres function/trigger would close that gap — happy to
-    // draft that SQL separately if you want it.
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
       .select("id, price, status")
@@ -202,6 +175,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         status: evaluation.status,
         reporter_name: input.reporterName,
         photo_url: photoUrl,
+        user_id: input.userId ?? null,
       })
       .select()
       .single();

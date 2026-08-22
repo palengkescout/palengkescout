@@ -1,0 +1,222 @@
+import { isSupabaseConfigured, supabase } from "./supabaseClient";
+import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
+import { addPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
+import type { Item, Market, PriceReport, PriceRowData } from "../types";
+
+const STORAGE_KEY = "palengkescout_reports_v1";
+
+/**
+ * Phase 1 scope: plain CRUD, no AI/anomaly logic yet (that's Phase 2).
+ * Every new report is saved as "pending" until Phase 2's verification
+ * logic is wired in.
+ *
+ * Runs against Supabase when VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+ * are set. Otherwise falls back to a local mock store seeded with
+ * realistic starting data, persisted in localStorage for the demo
+ * session, so the app is fully usable with zero setup.
+ */
+
+function loadMockReports(): PriceReport[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as PriceReport[];
+  } catch {
+    // ignore corrupt storage, fall back to seed
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(seedPriceReports));
+  return seedPriceReports;
+}
+
+function saveMockReports(reports: PriceReport[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+}
+
+export async function listItems(): Promise<Item[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.from("items").select("*").order("name");
+    if (error) throw error;
+    return data as Item[];
+  }
+  return seedItems;
+}
+
+export async function listMarkets(): Promise<Market[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.from("markets").select("*").order("name");
+    if (error) throw error;
+    return data as Market[];
+  }
+  return seedMarkets;
+}
+
+export async function getItem(itemId: string): Promise<Item | undefined> {
+  const items = await listItems();
+  return items.find((i) => i.id === itemId);
+}
+
+/** Maps a Supabase (snake_case) price_reports row + joined market into our camelCase shape. */
+function mapSupabaseRow(row: any): PriceRowData {
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    marketId: row.market_id,
+    price: Number(row.price),
+    status: row.status,
+    reportedAt: row.reported_at,
+    reporterName: row.reporter_name,
+    photoUrl: row.photo_url ?? undefined,
+    market: {
+      id: row.market.id,
+      name: row.market.name,
+      barangay: row.market.barangay,
+      type: row.market.type,
+      latitude: row.market.latitude,
+      longitude: row.market.longitude,
+    },
+  };
+}
+
+/** All price rows for one item, joined with market info, newest first. */
+export async function listPricesForItem(itemId: string): Promise<PriceRowData[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from("price_reports")
+      .select("*, market:markets(*)")
+      .eq("item_id", itemId)
+      .order("reported_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(mapSupabaseRow);
+  }
+
+  const reports = loadMockReports().filter((r) => r.itemId === itemId);
+  const markets = seedMarkets;
+  return reports
+    .map((r) => {
+      const market = markets.find((m) => m.id === r.marketId);
+      if (!market) return null;
+      return { ...r, market } satisfies PriceRowData;
+    })
+    .filter((r): r is PriceRowData => r !== null)
+    .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
+}
+
+/**
+ * Lowest currently-visible price per item, used for Home screen browse
+ * cards ("Tomato — from ₱82/kg"). Includes verified + pending, since
+ * this is a lightweight preview, not a trust-bearing figure.
+ *
+ * Fetches all reports once and groups them in memory, rather than one
+ * query per item — with 140+ items in the catalog, a per-item query
+ * would mean 140+ round-trips on every Home screen load.
+ */
+export async function listLowestPrices(): Promise<Record<string, number | null>> {
+  const result: Record<string, number | null> = {};
+
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from("price_reports")
+      .select("item_id, price, status")
+      .neq("status", "flagged");
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const current = result[row.item_id];
+      const price = Number(row.price);
+      result[row.item_id] = current === undefined || current === null ? price : Math.min(current, price);
+    }
+    return result;
+  }
+
+  const reports = loadMockReports().filter((r) => r.status !== "flagged");
+  for (const report of reports) {
+    const current = result[report.itemId];
+    result[report.itemId] =
+      current === undefined || current === null ? report.price : Math.min(current, report.price);
+  }
+  return result;
+}
+
+export interface ReportPriceInput {
+  itemId: string;
+  marketId: string;
+  price: number;
+  reporterName: string;
+  photoFile?: File; // optional — attaching a real photo earns bonus points
+}
+
+export interface ReportPriceResult {
+  report: PriceReport;
+  pointsAwarded: number;
+  totalPoints: number;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPhotoToSupabase(file: File): Promise<string> {
+  if (!supabase) throw new Error("Supabase not configured");
+  const path = `${Date.now()}-${file.name}`;
+  const { error } = await supabase.storage.from("price-photos").upload(path, file);
+  if (error) throw error;
+  const { data } = supabase.storage.from("price-photos").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceResult> {
+  const pointsAwarded = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
+
+  if (isSupabaseConfigured && supabase) {
+    const photoUrl = input.photoFile ? await uploadPhotoToSupabase(input.photoFile) : undefined;
+    const { data, error } = await supabase
+      .from("price_reports")
+      .insert({
+        item_id: input.itemId,
+        market_id: input.marketId,
+        price: input.price,
+        status: "pending",
+        reporter_name: input.reporterName,
+        photo_url: photoUrl,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    const totalPoints = addPoints(pointsAwarded);
+    return {
+      report: {
+        id: data.id,
+        itemId: data.item_id,
+        marketId: data.market_id,
+        price: Number(data.price),
+        status: data.status,
+        reportedAt: data.reported_at,
+        reporterName: data.reporter_name,
+        photoUrl: data.photo_url ?? undefined,
+      },
+      pointsAwarded,
+      totalPoints,
+    };
+  }
+
+  const photoUrl = input.photoFile ? await fileToDataUrl(input.photoFile) : undefined;
+  const reports = loadMockReports();
+  const newReport: PriceReport = {
+    id: `pr-${Date.now()}`,
+    itemId: input.itemId,
+    marketId: input.marketId,
+    price: input.price,
+    status: "pending",
+    reportedAt: new Date().toISOString(),
+    reporterName: input.reporterName || "Anonymous",
+    photoUrl,
+    pointsAwarded,
+  };
+  const updated = [newReport, ...reports];
+  saveMockReports(updated);
+  const totalPoints = addPoints(pointsAwarded);
+  return { report: newReport, pointsAwarded, totalPoints };
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CirclePlus, Award } from "lucide-react";
+import { ArrowLeft, CirclePlus, Award, ListPlus, Check } from "lucide-react";
 import PriceRow from "../components/PriceRow";
 import PriceHistoryChart from "../components/PriceHistoryChart";
 import EmptyState from "../components/EmptyState";
@@ -8,6 +8,7 @@ import { getItem, listPricesForItem } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_REPORT } from "../lib/points";
 import { useAuth } from "../lib/authContext";
+import { addToShoppingList, isItemInList } from "../lib/shoppingList";
 import type { Item, PriceRowData } from "../types";
 
 type SortMode = "price" | "recent";
@@ -20,6 +21,8 @@ export default function ItemPricesScreen() {
   const [rows, setRows] = useState<PriceRowData[]>([]);
   const [sort, setSort] = useState<SortMode>("price");
   const [loading, setLoading] = useState(true);
+  const [inList, setInList] = useState(false);
+  const [addingToList, setAddingToList] = useState(false);
 
   useEffect(() => {
     if (!itemId) return;
@@ -38,6 +41,11 @@ export default function ItemPricesScreen() {
     };
   }, [itemId]);
 
+  useEffect(() => {
+    if (!user || !itemId) return;
+    isItemInList(user.id, itemId).then(setInList);
+  }, [user, itemId]);
+
   const sortedRows = [...rows].sort((a, b) => {
     if (sort === "price") return a.price - b.price;
     return new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime();
@@ -53,6 +61,21 @@ export default function ItemPricesScreen() {
     navigate(`/report?item=${itemId}`);
   }
 
+  async function handleAddToList() {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    if (!itemId || inList || addingToList) return;
+    setAddingToList(true);
+    try {
+      await addToShoppingList(user.id, itemId);
+      setInList(true);
+    } finally {
+      setAddingToList(false);
+    }
+  }
+
   return (
     <div className="app-shell bg-cream">
       <header
@@ -66,16 +89,34 @@ export default function ItemPricesScreen() {
         >
           <ArrowLeft size={20} className="text-white" strokeWidth={2.2} />
         </button>
-        <div className="flex items-center gap-2.5">
-          <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center shrink-0">
-            <span className="text-[22px] leading-none" role="img" aria-label={item?.name ?? ""}>
-              {itemEmoji}
-            </span>
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+              <span className="text-[22px] leading-none" role="img" aria-label={item?.name ?? ""}>
+                {itemEmoji}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-display text-white text-xl leading-tight truncate">
+                {item?.name ?? "Loading..."}
+              </h1>
+              {item && <p className="text-cream/70 text-xs mt-0.5">Prices reported per {item.unit}</p>}
+            </div>
           </div>
-          <div>
-            <h1 className="font-display text-white text-xl leading-tight">{item?.name ?? "Loading..."}</h1>
-            {item && <p className="text-cream/70 text-xs mt-0.5">Prices reported per {item.unit}</p>}
-          </div>
+
+          {item && (
+            <button
+              onClick={handleAddToList}
+              disabled={addingToList}
+              aria-label={inList ? "Already in your list" : "Add to my list"}
+              className={`shrink-0 flex items-center gap-1.5 rounded-pill px-3 py-2 text-xs font-semibold min-h-[36px] ${
+                inList ? "bg-white/20 text-white" : "bg-white text-palengke-green"
+              }`}
+            >
+              {inList ? <Check size={14} strokeWidth={2.4} /> : <ListPlus size={14} strokeWidth={2.4} />}
+              {inList ? "In list" : "Add to list"}
+            </button>
+          )}
         </div>
       </header>
 

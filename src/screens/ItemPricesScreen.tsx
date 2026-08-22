@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CirclePlus, Award } from "lucide-react";
 import PriceRow from "../components/PriceRow";
+import PriceHistoryChart from "../components/PriceHistoryChart";
 import EmptyState from "../components/EmptyState";
 import { getItem, listPricesForItem } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
@@ -69,6 +70,8 @@ export default function ItemPricesScreen() {
       </header>
 
       <div className="app-content px-5 pt-4 pb-6">
+        {!loading && rows.length > 1 && <PriceHistoryChart rows={rows} />}
+
         {!loading && rows.length > 0 && (
           <div className="flex gap-2 mb-4">
             {(["price", "recent"] as SortMode[]).map((mode) => (

@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
 import { recordPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
 import { evaluateReportStatus } from "./verification";
+import { isEligibleForMultiplier } from "./leaderboard";
 import type { Item, Market, PriceReport, PriceRowData } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
@@ -54,6 +55,7 @@ function mapSupabaseRow(row: any): PriceRowData {
     reportedAt: row.reported_at,
     reporterName: row.reporter_name,
     photoUrl: row.photo_url ?? undefined,
+    userId: row.user_id ?? undefined,
     market: {
       id: row.market.id,
       name: row.market.name,
@@ -88,19 +90,31 @@ export async function listPricesForItem(itemId: string): Promise<PriceRowData[]>
     .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
 }
 
-export async function listLowestPrices(): Promise<Record<string, number | null>> {
-  const result: Record<string, number | null> = {};
+export interface LowestPriceInfo {
+  price: number;
+  reporterId: string | null;
+}
+
+/**
+ * Lowest currently-visible price per item, plus who reported it — the
+ * reporter id is used to show a "Top Scout" badge on the Home screen card
+ * when that reporter is currently in this week's top 3.
+ */
+export async function listLowestPrices(): Promise<Record<string, LowestPriceInfo | null>> {
+  const result: Record<string, LowestPriceInfo | null> = {};
 
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
       .from("price_reports")
-      .select("item_id, price, status")
+      .select("item_id, price, status, user_id")
       .neq("status", "flagged");
     if (error) throw error;
     for (const row of data ?? []) {
       const current = result[row.item_id];
       const price = Number(row.price);
-      result[row.item_id] = current === undefined || current === null ? price : Math.min(current, price);
+      if (!current || price < current.price) {
+        result[row.item_id] = { price, reporterId: row.user_id ?? null };
+      }
     }
     return result;
   }
@@ -108,8 +122,9 @@ export async function listLowestPrices(): Promise<Record<string, number | null>>
   const reports = loadMockReports().filter((r) => r.status !== "flagged");
   for (const report of reports) {
     const current = result[report.itemId];
-    result[report.itemId] =
-      current === undefined || current === null ? report.price : Math.min(current, report.price);
+    if (!current || report.price < current.price) {
+      result[report.itemId] = { price: report.price, reporterId: report.userId ?? null };
+    }
   }
   return result;
 }
@@ -127,6 +142,7 @@ export interface ReportPriceResult {
   report: PriceReport;
   pointsAwarded: number;
   totalPoints: number;
+  multiplierApplied: boolean;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -148,7 +164,9 @@ async function uploadPhotoToSupabase(file: File): Promise<string> {
 }
 
 export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceResult> {
-  const pointsAwarded = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
+  const baseline = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
+  const multiplierApplied = input.userId ? await isEligibleForMultiplier(input.userId) : false;
+  const pointsAwarded = multiplierApplied ? Math.round(baseline * 1.5) : baseline;
   const reason = input.photoFile ? "report_with_photo" : "report";
 
   if (isSupabaseConfigured && supabase) {
@@ -207,9 +225,11 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         reportedAt: data.reported_at,
         reporterName: data.reporter_name,
         photoUrl: data.photo_url ?? undefined,
+        userId: data.user_id ?? undefined,
       },
       pointsAwarded,
       totalPoints,
+      multiplierApplied,
     };
   }
 
@@ -230,6 +250,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     reporterName: input.reporterName || "Anonymous",
     photoUrl,
     pointsAwarded,
+    userId: input.userId,
   };
 
   const upgraded = reports.map((r) =>
@@ -239,5 +260,5 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   saveMockReports(updated);
 
   const totalPoints = await recordPoints({ userId: input.userId, points: pointsAwarded, reason });
-  return { report: newReport, pointsAwarded, totalPoints };
+  return { report: newReport, pointsAwarded, totalPoints, multiplierApplied };
 }

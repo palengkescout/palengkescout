@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Award } from "lucide-react";
+import { Award, Flame } from "lucide-react";
 import type { Item } from "../types";
 import { formatPeso } from "../lib/format";
 import { getItemEmoji } from "../lib/categoryIcons";
@@ -8,15 +8,22 @@ import { POINTS_FOR_REPORT } from "../lib/points";
 interface ItemCardProps {
   item: Item;
   lowestPrice: number | null;
+  isTopScout?: boolean;
 }
 
-export default function ItemCard({ item, lowestPrice }: ItemCardProps) {
+export default function ItemCard({ item, lowestPrice, isTopScout }: ItemCardProps) {
   const emoji = getItemEmoji(item.name, item.category);
   return (
     <Link
       to={`/item/${item.id}`}
-      className="bg-white rounded-card shadow-card p-3.5 flex flex-col gap-2 active:scale-[0.97] transition-transform"
+      className="relative bg-white rounded-card shadow-card p-3.5 flex flex-col gap-2 active:scale-[0.97] transition-transform"
     >
+      {isTopScout && (
+        <span className="absolute top-2 right-2 inline-flex items-center gap-0.5 text-[10px] font-semibold text-white bg-palengke-gold-dark rounded-pill px-1.5 py-0.5">
+          <Flame size={10} strokeWidth={2.6} />
+          Top Scout
+        </span>
+      )}
       <div className="w-11 h-11 rounded-full bg-cream-soft flex items-center justify-center">
         <span className="text-[22px] leading-none" role="img" aria-label={item.name}>
           {emoji}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Camera, X, Award, LogIn } from "lucide-react";
+import { CheckCircle2, Camera, X, Award, LogIn, Flame } from "lucide-react";
 import TopBar from "../components/TopBar";
 import Dropdown from "../components/Dropdown";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
@@ -27,6 +27,7 @@ export default function ReportScreen() {
     pointsAwarded: number;
     totalPoints: number;
     status: PriceStatus;
+    multiplierApplied: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +82,7 @@ export default function ReportScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const { report, pointsAwarded, totalPoints } = await reportPrice({
+      const { report, pointsAwarded, totalPoints, multiplierApplied } = await reportPrice({
         itemId,
         marketId,
         price: priceValue,
@@ -89,7 +90,7 @@ export default function ReportScreen() {
         photoFile: photoFile ?? undefined,
         userId: user?.id,
       });
-      setResult({ pointsAwarded, totalPoints, status: report.status });
+      setResult({ pointsAwarded, totalPoints, status: report.status, multiplierApplied });
     } catch {
       setError("Something went wrong saving your report. Please try again.");
     } finally {
@@ -103,9 +104,6 @@ export default function ReportScreen() {
     handlePhotoSelect(null);
   }
 
-  // Guards direct navigation to /report while logged out (e.g. a bookmarked
-  // or typed URL), on top of the login prompts already shown by BottomNav
-  // and the other entry points.
   if (!authLoading && !user) {
     return (
       <div className="app-shell bg-cream">
@@ -159,6 +157,13 @@ export default function ReportScreen() {
               market, so it's been <span className="font-medium text-ink">flagged for review</span>.
               Thanks for reporting — we'll take a closer look.
             </p>
+          )}
+
+          {result.multiplierApplied && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-3 py-1.5 mb-3">
+              <Flame size={13} strokeWidth={2.4} />
+              1.5x bonus — you were in last week's Top 3!
+            </div>
           )}
 
           <div className="flex items-center gap-2 bg-palengke-gold/15 text-palengke-gold-dark rounded-pill px-4 py-2 mb-6">

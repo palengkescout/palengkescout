@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import ItemCard from "../components/ItemCard";
 import EmptyState from "../components/EmptyState";
-import { listItems, listLowestPrices } from "../lib/dataClient";
+import { listItems, listLowestPrices, type LowestPriceInfo } from "../lib/dataClient";
+import { getLeaderboard } from "../lib/leaderboard";
 import { useAuth } from "../lib/authContext";
 import type { Item } from "../types";
 
@@ -11,17 +12,23 @@ export default function HomeScreen() {
   const navigate = useNavigate();
   const { user, openAuthModal } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
-  const [lowestPrices, setLowestPrices] = useState<Record<string, number | null>>({});
+  const [lowestPrices, setLowestPrices] = useState<Record<string, LowestPriceInfo | null>>({});
+  const [topScoutIds, setTopScoutIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [itemList, lowest] = await Promise.all([listItems(), listLowestPrices()]);
+      const [itemList, lowest, board] = await Promise.all([
+        listItems(),
+        listLowestPrices(),
+        getLeaderboard("week"),
+      ]);
       if (!cancelled) {
         setItems(itemList);
         setLowestPrices(lowest);
+        setTopScoutIds(new Set(board.slice(0, 3).map((e) => e.userId)));
         setLoading(false);
       }
     })();
@@ -103,9 +110,18 @@ export default function HomeScreen() {
               <section key={category}>
                 <h2 className="text-sm font-semibold text-ink-soft mb-2.5 px-0.5">{category}</h2>
                 <div className="grid grid-cols-2 gap-3">
-                  {categoryItems.map((item) => (
-                    <ItemCard key={item.id} item={item} lowestPrice={lowestPrices[item.id] ?? null} />
-                  ))}
+                  {categoryItems.map((item) => {
+                    const lowest = lowestPrices[item.id] ?? null;
+                    const isTopScout = Boolean(lowest?.reporterId && topScoutIds.has(lowest.reporterId));
+                    return (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        lowestPrice={lowest?.price ?? null}
+                        isTopScout={isTopScout}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             ))}

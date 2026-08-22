@@ -12,8 +12,8 @@ export interface Market {
 export interface Item {
   id: string;
   name: string;
-  unit: string; // "kg" | "piece" | "bundle" | ...
-  category: string; // used to resolve a lucide icon, see lib/categoryIcons
+  unit: string;
+  category: string;
 }
 
 export type PriceStatus = "verified" | "pending" | "flagged";
@@ -24,14 +24,13 @@ export interface PriceReport {
   marketId: string;
   price: number;
   status: PriceStatus;
-  reportedAt: string; // ISO timestamp
+  reportedAt: string;
   reporterName: string;
-  photoUrl?: string; // optional photo of the product, attached by the reporter
-  pointsAwarded?: number; // points earned for this specific report
+  photoUrl?: string;
+  pointsAwarded?: number;
+  userId?: string; // logged-in reporter's id, used for priority-visibility highlighting
 }
 
-// Convenience shape used once a price report is joined with its market,
-// for rendering a single row in a results list.
 export interface PriceRowData extends PriceReport {
   market: Market;
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Mail, Lock } from "lucide-react";
+import { X, Mail, Lock, UserRound } from "lucide-react";
 import { signIn, signUp } from "../lib/authClient";
 
 interface AuthModalProps {
@@ -12,6 +12,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signupSuccess, setSignupSuccess] = useState(false);
@@ -29,7 +30,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         }
         onClose();
       } else {
-        const result = await signUp(email, password);
+        const result = await signUp(email, password, username);
         if (result.error) {
           setError(result.error);
           return;
@@ -60,7 +61,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         {signupSuccess ? (
           <p className="text-ink-soft text-sm">
             We sent a confirmation link to <span className="font-medium text-ink">{email}</span>. Confirm
-            it, then come back and log in.
+            it, then come back and log in as <span className="font-medium text-ink">{username}</span>.
           </p>
         ) : (
           <>
@@ -71,6 +72,36 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             </p>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+              {mode === "signup" && (
+                <div>
+                  <label htmlFor="auth-username" className="block text-sm font-semibold text-ink mb-1.5">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <UserRound
+                      size={17}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
+                      strokeWidth={2}
+                    />
+                    <input
+                      id="auth-username"
+                      type="text"
+                      required
+                      minLength={3}
+                      maxLength={20}
+                      pattern="[A-Za-z0-9_]{3,20}"
+                      placeholder="e.g. mira_shops"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full bg-cream-soft rounded-card pl-10 pr-4 py-3 text-[15px] outline-none min-h-[46px]"
+                    />
+                  </div>
+                  <p className="text-ink-faint text-xs mt-1.5">
+                    3–20 characters: letters, numbers, or underscores. Shown on the leaderboard.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="auth-email" className="block text-sm font-semibold text-ink mb-1.5">
                   Email

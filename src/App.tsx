@@ -1,11 +1,10 @@
 import { Route, Routes, useLocation } from "react-router-dom";
-import { ClipboardList } from "lucide-react";
 import BottomNav from "./components/BottomNav";
 import HomeScreen from "./screens/HomeScreen";
 import ItemPricesScreen from "./screens/ItemPricesScreen";
 import ReportScreen from "./screens/ReportScreen";
 import ProfileScreen from "./screens/ProfileScreen";
-import PlaceholderScreen from "./screens/PlaceholderScreen";
+import ListScreen from "./screens/ListScreen";
 import { AuthProvider } from "./lib/authContext";
 
 export default function App() {
@@ -19,17 +18,7 @@ export default function App() {
             <Route path="/" element={<HomeScreen />} />
             <Route path="/item/:itemId" element={<ItemPricesScreen />} />
             <Route path="/report" element={<ReportScreen />} />
-            <Route
-              path="/list"
-              element={
-                <PlaceholderScreen
-                  title="My List"
-                  subtitle="Compare a full basket across markets."
-                  icon={ClipboardList}
-                  comingIn="Build a shopping list and see which market is cheapest overall — arriving in Phase 4."
-                />
-              }
-            />
+            <Route path="/list" element={<ListScreen />} />
             <Route path="/profile" element={<ProfileScreen />} />
           </Routes>
         </div>

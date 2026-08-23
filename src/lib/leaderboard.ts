@@ -13,30 +13,48 @@ export interface PeriodWinner {
   winner: LeaderboardEntry | null;
 }
 
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function manilaNow(): Date {
+  return new Date(Date.now() + MANILA_OFFSET_MS);
+}
+
+function manilaWallClockToUtc(manilaWallClock: Date): Date {
+  return new Date(manilaWallClock.getTime() - MANILA_OFFSET_MS);
+}
+
 function getPeriodRange(period: LeaderboardPeriod, offset: number): { start: Date; end: Date } {
-  const now = new Date();
+  const manila = manilaNow();
+
   if (period === "week") {
-    const day = now.getDay();
+    const day = manila.getUTCDay(); // 0 = Sunday, using UTC getters on the shifted date
     const diffToMonday = day === 0 ? 6 : day - 1;
-    const currentMonday = new Date(now);
-    currentMonday.setHours(0, 0, 0, 0);
-    currentMonday.setDate(now.getDate() - diffToMonday);
-    const start = new Date(currentMonday);
-    start.setDate(start.getDate() - offset * 7);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 7);
-    return { start, end };
+    const currentMonday = new Date(manila);
+    currentMonday.setUTCHours(0, 0, 0, 0);
+    currentMonday.setUTCDate(manila.getUTCDate() - diffToMonday);
+
+    const startManila = new Date(currentMonday);
+    startManila.setUTCDate(startManila.getUTCDate() - offset * 7);
+    const endManila = new Date(startManila);
+    endManila.setUTCDate(startManila.getUTCDate() + 7);
+
+    return { start: manilaWallClockToUtc(startManila), end: manilaWallClockToUtc(endManila) };
   }
-  const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-  const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
-  return { start, end };
+
+  const startManila = new Date(Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth() - offset, 1));
+  const endManila = new Date(Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth() - offset + 1, 1));
+  return { start: manilaWallClockToUtc(startManila), end: manilaWallClockToUtc(endManila) };
 }
 
 function formatPeriodLabel(period: LeaderboardPeriod, start: Date): string {
   if (period === "week") {
-    return `Week of ${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    return `Week of ${start.toLocaleDateString("en-PH", {
+      month: "short",
+      day: "numeric",
+      timeZone: "Asia/Manila",
+    })}`;
   }
-  return start.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return start.toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "Asia/Manila" });
 }
 
 async function getLeaderboardForRange(start: Date, end: Date): Promise<LeaderboardEntry[]> {
@@ -63,34 +81,22 @@ async function getLeaderboardForRange(start: Date, end: Date): Promise<Leaderboa
   return Array.from(totals.values()).sort((a, b) => b.points - a.points);
 }
 
-/**
- * Weekly/monthly leaderboards are just point_events filtered to the current
- * window — there's no destructive "reset" each period, the window simply
- * moves forward, so nobody's history is ever lost.
- */
 export async function getLeaderboard(period: LeaderboardPeriod): Promise<LeaderboardEntry[]> {
   const { start, end } = getPeriodRange(period, 0);
   return getLeaderboardForRange(start, end);
 }
 
-/** Top 3 from the most recently *completed* week — used to grant next week's point multiplier. */
 export async function getPreviousTopThree(): Promise<string[]> {
   const { start, end } = getPeriodRange("week", 1);
   const board = await getLeaderboardForRange(start, end);
   return board.slice(0, 3).map((e) => e.userId);
 }
 
-/** Whether this user finished in the top 3 last week, earning a point multiplier this week. */
 export async function isEligibleForMultiplier(userId: string): Promise<boolean> {
   const topThree = await getPreviousTopThree();
   return topThree.includes(userId);
 }
 
-/**
- * Hall of Fame: the #1 finisher for each of the last `count` completed
- * periods. Computed on demand from point_events history — nothing is
- * snapshotted or destroyed when a period ends.
- */
 export async function getHallOfFame(period: LeaderboardPeriod, count = 8): Promise<PeriodWinner[]> {
   const winners: PeriodWinner[] = [];
   for (let offset = 1; offset <= count; offset++) {

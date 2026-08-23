@@ -3,6 +3,8 @@ import type { PriceStatus } from "../types";
 export const PRICE_TOLERANCE_PCT = 0.15; // within 15% of the reference price = valid
 export const PRICE_FLAG_PCT = 0.5; // more than 50% off = flagged for review
 
+const MIN_BASELINE_SAMPLE = 2;
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -17,9 +19,33 @@ export interface ReportForEvaluation {
 
 export interface StatusEvaluation {
   status: PriceStatus;
-  /** IDs of existing pending reports that should also be upgraded to
-   *  verified, because the new report corroborates them. */
   upgradeReportIds: string[];
+}
+
+function clusterPrices(
+  reports: ReportForEvaluation[],
+  tolerancePct: number
+): ReportForEvaluation[][] {
+  const sorted = [...reports].sort((a, b) => a.price - b.price);
+  const clusters: ReportForEvaluation[][] = [];
+
+  for (const report of sorted) {
+    const lastCluster = clusters[clusters.length - 1];
+    if (lastCluster) {
+      const clusterMedian = median(lastCluster.map((r) => r.price));
+      if (Math.abs(report.price - clusterMedian) / clusterMedian <= tolerancePct) {
+        lastCluster.push(report);
+        continue;
+      }
+    }
+    clusters.push([report]);
+  }
+
+  return clusters;
+}
+
+function largestCluster(clusters: ReportForEvaluation[][]): ReportForEvaluation[] {
+  return clusters.reduce((largest, c) => (c.length > largest.length ? c : largest), [] as ReportForEvaluation[]);
 }
 
 /**
@@ -33,11 +59,15 @@ export interface StatusEvaluation {
  *   gaps are expected and pass fine.
  * - A report more than PRICE_FLAG_PCT off gets flagged for review instead
  *   of silently accepted — no matter whose report it is.
- * - If nothing is verified yet, a new report is checked against other
- *   *pending* reports for agreement. Two independent people landing in the
- *   same range counts as corroboration, and both become verified together.
- * - A true first-of-its-kind report (nothing to compare against at all)
- *   stays pending — there's nothing yet to judge it against.
+ * - If nothing is verified yet, pending reports are grouped into clusters
+ *   of mutual agreement, and the *largest* cluster becomes the baseline —
+ *   not just any single matching report. This matters when pending reports
+ *   split into two different price groups (e.g. a promo price vs a regular
+ *   price): the new report should be judged against the group most people
+ *   agree on, not whichever isolated report it happens to land near first.
+ * - A true first-of-its-kind report, or one with no cluster big enough to
+ *   count as consensus yet, stays pending — there's nothing solid yet to
+ *   judge it against.
  */
 export function evaluateReportStatus(
   newPrice: number,
@@ -55,6 +85,22 @@ export function evaluateReportStatus(
   }
 
   const pending = existingReportsSameMarket.filter((r) => r.status === "pending");
+  const clusters = clusterPrices(pending, PRICE_TOLERANCE_PCT);
+  const biggest = largestCluster(clusters);
+
+  if (biggest.length >= MIN_BASELINE_SAMPLE) {
+    const baseline = median(biggest.map((r) => r.price));
+    const diffPct = Math.abs(newPrice - baseline) / baseline;
+
+    if (diffPct <= PRICE_TOLERANCE_PCT) {
+      return { status: "verified", upgradeReportIds: biggest.map((r) => r.id) };
+    }
+    if (diffPct > PRICE_FLAG_PCT) {
+      return { status: "flagged", upgradeReportIds: [] };
+    }
+    return { status: "pending", upgradeReportIds: [] };
+  }
+
   const corroborating = pending.filter(
     (r) => Math.abs(newPrice - r.price) / r.price <= PRICE_TOLERANCE_PCT
   );

@@ -99,7 +99,10 @@ export default function Dropdown({
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-2 w-full bg-white rounded-card shadow-card border border-black/5 overflow-hidden">
+        // z-[1100]: Leaflet's own panes/controls (used by LocationPicker)
+        // climb as high as z-index 1000 internally, so this has to clear
+        // that — a plain z-20/z-30 was rendering behind an open map.
+        <div className="absolute z-[1100] mt-2 w-full bg-white rounded-card shadow-card border border-black/5 overflow-hidden">
           {searchable && (
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-black/5">
               <Search size={16} className="text-ink-faint shrink-0" />

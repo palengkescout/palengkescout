@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { LogIn, LogOut, Trophy, Award, CircleCheck, CircleAlert, Clock, Flame, Crown } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { LogIn, LogOut, Trophy, Award, CircleCheck, CircleAlert, Clock, Flame, Crown, TriangleAlert } from "lucide-react";
 import TopBar from "../components/TopBar";
 import ProfileSkeleton from "../components/ProfileSkeleton";
 import { useAuth } from "../lib/authContext";
@@ -27,12 +27,13 @@ export default function ProfileScreen() {
   const [hofPeriod, setHofPeriod] = useState<LeaderboardPeriod>("week");
   const [hallOfFame, setHallOfFame] = useState<PeriodWinner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadProfile = useCallback(async () => {
     if (!user) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
+    setLoading(true);
+    setLoadError(null);
+    try {
       const [total, reporterStats, profileRow, eligible] = await Promise.all([
         getTotalPoints(user.id),
         getReporterStats(user.id),
@@ -41,27 +42,35 @@ export default function ProfileScreen() {
           : Promise.resolve({ data: null }),
         isEligibleForMultiplier(user.id),
       ]);
-      if (!cancelled) {
-        setPoints(total);
-        setStats(reporterStats);
-        setDisplayName((profileRow as any)?.data?.display_name ?? user.email ?? "Scout");
-        setMultiplierEligible(eligible);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setPoints(total);
+      setStats(reporterStats);
+      setDisplayName((profileRow as any)?.data?.display_name ?? user.email ?? "Scout");
+      setMultiplierEligible(eligible);
+    } catch {
+      // Previously this had no .catch() — a failed request left `loading`
+      // stuck true forever, an endless skeleton with no explanation.
+      setLoadError("Couldn't load your profile right now. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
     if (!user) return;
-    getLeaderboard(period).then(setLeaderboard);
+    getLeaderboard(period)
+      .then(setLeaderboard)
+      .catch(() => setLeaderboard([]));
   }, [user, period]);
 
   useEffect(() => {
     if (!user) return;
-    getHallOfFame(hofPeriod, 8).then(setHallOfFame);
+    getHallOfFame(hofPeriod, 8)
+      .then(setHallOfFame)
+      .catch(() => setHallOfFame([]));
   }, [user, hofPeriod]);
 
   if (!authLoading && !user) {
@@ -93,6 +102,27 @@ export default function ProfileScreen() {
         <TopBar title="Profile" subtitle="Your contributions to PalengkeScout" />
         <div className="app-content px-5 pt-4 pb-8">
           <ProfileSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="app-shell bg-cream">
+        <TopBar title="Profile" subtitle="Your contributions to PalengkeScout" />
+        <div className="app-content flex flex-col items-center justify-center px-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-fresh-red/10 flex items-center justify-center mb-4">
+            <TriangleAlert size={26} className="text-fresh-red" strokeWidth={2} />
+          </div>
+          <p className="font-display text-lg text-ink mb-1.5">Couldn't load your profile</p>
+          <p className="text-ink-soft text-sm max-w-[30ch] mb-6">{loadError}</p>
+          <button
+            onClick={loadProfile}
+            className="w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px]"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );

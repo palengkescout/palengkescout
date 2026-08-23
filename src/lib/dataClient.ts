@@ -3,6 +3,7 @@ import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
 import { recordPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
 import { evaluateReportStatus } from "./verification";
 import { isEligibleForMultiplier } from "./leaderboard";
+import { enforceReportCooldown } from "./rateLimit";
 import type { Item, Market, PriceReport, PriceRowData } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
@@ -170,6 +171,20 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   const reason = input.photoFile ? "report_with_photo" : "report";
 
   if (isSupabaseConfigured && supabase) {
+    if (input.userId) {
+      const { data: lastOwn, error: lastOwnError } = await supabase
+        .from("price_reports")
+        .select("reported_at")
+        .eq("item_id", input.itemId)
+        .eq("market_id", input.marketId)
+        .eq("user_id", input.userId)
+        .order("reported_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastOwnError) throw lastOwnError;
+      enforceReportCooldown(lastOwn?.reported_at ?? null);
+    }
+
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
       .select("id, price, status")
@@ -233,7 +248,15 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     };
   }
 
+  // Mock/local-dev branch — same cooldown rule, checked against localStorage.
   const reports = loadMockReports();
+  if (input.userId) {
+    const ownReports = reports
+      .filter((r) => r.itemId === input.itemId && r.marketId === input.marketId && r.userId === input.userId)
+      .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
+    enforceReportCooldown(ownReports[0]?.reportedAt ?? null);
+  }
+
   const sameItemMarketReports = reports.filter(
     (r) => r.itemId === input.itemId && r.marketId === input.marketId
   );

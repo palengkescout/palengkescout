@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Mail, Lock, UserRound } from "lucide-react";
+import { X, Mail, Lock, UserRound, Eye, EyeOff } from "lucide-react";
 import { signIn, signUp } from "../lib/authClient";
 
 interface AuthModalProps {
@@ -16,6 +16,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +41,16 @@ export default function AuthModal({ onClose }: AuthModalProps) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Hold-to-reveal, not a toggle: the password is only visible while the
+  // button is actively pressed, and hides again the instant it's released
+  // (mouse up, finger lifted, drag off the button, or key released).
+  function revealPassword() {
+    setShowPassword(true);
+  }
+  function hidePassword() {
+    setShowPassword(false);
   }
 
   return (
@@ -136,14 +147,47 @@ export default function AuthModal({ onClose }: AuthModalProps) {
                   />
                   <input
                     id="auth-password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     minLength={6}
                     autoComplete={mode === "signin" ? "current-password" : "new-password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-cream-soft rounded-card pl-10 pr-4 py-3 text-[15px] outline-none min-h-[46px]"
+                    className="w-full bg-cream-soft rounded-card pl-10 pr-11 py-3 text-[15px] outline-none min-h-[46px]"
                   />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Password shown, release to hide" : "Hold to show password"}
+                    aria-pressed={showPassword}
+                    // Mouse
+                    onMouseDown={revealPassword}
+                    onMouseUp={hidePassword}
+                    onMouseLeave={hidePassword}
+                    // Touch — preventDefault stops the iOS/Android long-press
+                    // callout (magnifier/copy menu) from popping up mid-hold.
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      revealPassword();
+                    }}
+                    onTouchEnd={hidePassword}
+                    onTouchCancel={hidePassword}
+                    // Keyboard — holding Enter/Space down reveals it, same as a physical hold.
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") revealPassword();
+                    }}
+                    onKeyUp={(e) => {
+                      if (e.key === "Enter" || e.key === " ") hidePassword();
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-faint active:text-palengke-green select-none"
+                    style={{ WebkitTouchCallout: "none", touchAction: "manipulation" }}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={17} strokeWidth={2} />
+                    ) : (
+                      <Eye size={17} strokeWidth={2} />
+                    )}
+                  </button>
                 </div>
               </div>
 

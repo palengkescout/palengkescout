@@ -1,18 +1,40 @@
 import { useEffect, useState } from "react";
 import { LogIn, ShieldAlert, Store, Trash2, Plus } from "lucide-react";
 import TopBar from "../components/TopBar";
-import Dropdown from "../components/Dropdown";
+import Dropdown, { type DropdownOption } from "../components/Dropdown";
 import LocationPicker from "../components/LocationPicker";
 import { useAuth } from "../lib/authContext";
 import { listMarkets } from "../lib/dataClient";
 import { checkIsAdmin, createMarket, deleteMarket } from "../lib/adminMarkets";
+import { marketTypeLabel } from "../lib/format";
+import { getMarketTypeIcon } from "../lib/marketIcons";
 import type { Market, MarketType } from "../types";
 
-const TYPE_OPTIONS: { value: MarketType; label: string }[] = [
-  { value: "wet_market", label: "Wet Market" },
-  { value: "grocery", label: "Grocery" },
-  { value: "sari_sari", label: "Sari-Sari Store" },
+// Order chosen for how common each type is in a typical Metro Manila
+// barangay, so the most likely pick sits at the top of the list.
+const MARKET_TYPES: MarketType[] = [
+  "wet_market",
+  "public_market",
+  "supermarket",
+  "grocery",
+  "sari_sari",
+  "farmers_market",
 ];
+
+const TYPE_DESCRIPTIONS: Record<MarketType, string> = {
+  wet_market: "A stall or section selling fresh produce, meat, or fish",
+  public_market: "The full municipal/city-run market complex",
+  supermarket: "Large chain store — SM, Puregold, Robinsons, etc.",
+  grocery: "Smaller standalone grocery or mini mart",
+  farmers_market: "Direct-from-farm, often a weekend pop-up",
+  sari_sari: "Small neighborhood variety store",
+};
+
+const TYPE_OPTIONS: DropdownOption[] = MARKET_TYPES.map((type) => ({
+  value: type,
+  label: marketTypeLabel(type),
+  icon: getMarketTypeIcon(type),
+}));
 
 // Not linked from BottomNav or anywhere else in the app — reachable only by
 // typing this exact URL. Harmless even if someone stumbles onto it: the
@@ -147,6 +169,8 @@ export default function AdminMarketsScreen() {
     );
   }
 
+  const selectedTypeDescription = TYPE_DESCRIPTIONS[type];
+
   return (
     <div className="app-shell bg-cream">
       <TopBar title="Admin" subtitle="Manage markets" />
@@ -155,28 +179,50 @@ export default function AdminMarketsScreen() {
         <form onSubmit={handleSubmit} className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3.5">
           <p className="font-semibold text-ink text-sm">Add a new market</p>
 
-          <input
-            type="text"
-            placeholder="Market name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full bg-cream-soft rounded-card px-4 py-3 text-[15px] outline-none min-h-[46px]"
-          />
-          <input
-            type="text"
-            placeholder="Barangay"
-            value={barangay}
-            onChange={(e) => setBarangay(e.target.value)}
-            className="w-full bg-cream-soft rounded-card px-4 py-3 text-[15px] outline-none min-h-[46px]"
-          />
-          <Dropdown
-            value={type}
-            options={TYPE_OPTIONS}
-            onChange={(v) => setType(v as MarketType)}
-            placeholder="Market type"
-          />
           <div>
-            <p className="text-xs font-semibold text-ink mb-1.5">Pin the exact location</p>
+            <label htmlFor="market-name" className="block text-sm font-semibold text-ink mb-1.5">
+              Market name
+            </label>
+            <input
+              id="market-name"
+              type="text"
+              placeholder="e.g. Poblacion Public Market"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-cream-soft rounded-card px-4 py-3 text-[15px] outline-none min-h-[46px]"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="market-barangay" className="block text-sm font-semibold text-ink mb-1.5">
+              Barangay
+            </label>
+            <input
+              id="market-barangay"
+              type="text"
+              placeholder="e.g. Poblacion"
+              value={barangay}
+              onChange={(e) => setBarangay(e.target.value)}
+              className="w-full bg-cream-soft rounded-card px-4 py-3 text-[15px] outline-none min-h-[46px]"
+            />
+          </div>
+
+          <div>
+            <Dropdown
+              id="market-type"
+              label="Market type"
+              value={type}
+              options={TYPE_OPTIONS}
+              onChange={(v) => setType(v as MarketType)}
+              placeholder="Market type"
+            />
+            {selectedTypeDescription && (
+              <p className="text-ink-faint text-xs mt-1.5">{selectedTypeDescription}</p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-ink mb-1.5">Pin the exact location</p>
             <LocationPicker
               latitude={lat}
               longitude={lng}
@@ -187,7 +233,11 @@ export default function AdminMarketsScreen() {
             />
           </div>
 
-          {error && <p className="text-fresh-red text-sm">{error}</p>}
+          {error && (
+            <p role="alert" className="text-fresh-red text-sm">
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
@@ -207,28 +257,36 @@ export default function AdminMarketsScreen() {
 
           {loadingMarkets ? (
             <p className="text-ink-faint text-xs">Loading...</p>
+          ) : markets.length === 0 ? (
+            <p className="text-ink-faint text-xs py-2">No markets added yet.</p>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {markets.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between gap-2 py-2 border-b border-black/5 last:border-0"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink truncate">{m.name}</p>
-                    <p className="text-ink-faint text-xs">
-                      {m.barangay} · {m.type}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(m.id)}
-                    aria-label={`Delete ${m.name}`}
-                    className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 active:bg-fresh-red/10"
+            <ul className="flex flex-col gap-1">
+              {markets.map((m) => {
+                const TypeIcon = getMarketTypeIcon(m.type);
+                return (
+                  <li
+                    key={m.id}
+                    className="flex items-center gap-3 py-2.5 border-b border-black/5 last:border-0"
                   >
-                    <Trash2 size={16} className="text-fresh-red" strokeWidth={2} />
-                  </button>
-                </li>
-              ))}
+                    <div className="w-9 h-9 rounded-full bg-cream-soft flex items-center justify-center shrink-0">
+                      <TypeIcon size={16} className="text-palengke-green" strokeWidth={2} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink truncate">{m.name}</p>
+                      <p className="text-ink-faint text-xs">
+                        {m.barangay} · {marketTypeLabel(m.type)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(m.id)}
+                      aria-label={`Delete ${m.name}`}
+                      className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 active:bg-fresh-red/10"
+                    >
+                      <Trash2 size={16} className="text-fresh-red" strokeWidth={2} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

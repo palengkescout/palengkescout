@@ -1,16 +1,3 @@
-// Supabase Edge Function — deploy with:
-//   supabase functions deploy recommend-market
-// Then set the secret once (never commit the real key anywhere):
-//   supabase secrets set OPENAI_API_KEY=sk-your-real-key
-//
-// This keeps the API key server-side only; the client never sees it.
-//
-// Model choice: gpt-5-mini. It's noticeably more reliable than gpt-5-nano
-// for getting the price/distance trade-off phrased correctly, while still
-// costing a fraction of a cent per call (~$0.25/1M input, $2/1M output
-// tokens) — the right balance of "cheap" and "actually gets it right" for
-// a short, factual recommendation like this.
-
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 Deno.serve(async (req) => {

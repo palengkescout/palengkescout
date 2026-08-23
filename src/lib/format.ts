@@ -25,8 +25,14 @@ export function marketTypeLabel(type: string): string {
   switch (type) {
     case "wet_market":
       return "Wet Market";
+    case "public_market":
+      return "Public Market";
+    case "supermarket":
+      return "Supermarket";
     case "grocery":
-      return "Grocery";
+      return "Grocery / Mini Mart";
+    case "farmers_market":
+      return "Farmer's Market";
     case "sari_sari":
       return "Sari-Sari Store";
     default:

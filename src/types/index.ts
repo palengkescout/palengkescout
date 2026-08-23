@@ -1,4 +1,10 @@
-export type MarketType = "wet_market" | "grocery" | "sari_sari";
+export type MarketType =
+  | "wet_market"
+  | "public_market"
+  | "supermarket"
+  | "grocery"
+  | "farmers_market"
+  | "sari_sari";
 
 export interface Market {
   id: string;

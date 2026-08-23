@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 import type { Market } from "../types";
-import type { ShoppingListRow } from "./shoppingList";
-import { haversineDistanceKm, getBarangayReferencePoint } from "./geo";
+import type { ShoppingListRow, SavedLocation } from "./shoppingList";
+import { haversineDistanceKm } from "./geo";
 
 export interface MarketBasketResult {
   market: Market;
@@ -29,7 +29,7 @@ function normalize(value: number, min: number, max: number): number {
 export async function getMarketRecommendation(
   listRows: ShoppingListRow[],
   markets: Market[],
-  userBarangay: string | null
+  userLocation: SavedLocation | null
 ): Promise<RecommendationResult> {
   if (listRows.length === 0 || markets.length === 0 || !isSupabaseConfigured || !supabase) {
     return { ranked: [], best: null, aiExplanation: null };
@@ -53,8 +53,6 @@ export async function getMarketRecommendation(
     if (current === undefined || price < current) cheapestByMarketItem.set(key, price);
   }
 
-  const referencePoint = userBarangay ? getBarangayReferencePoint(userBarangay, markets) : null;
-
   const results: MarketBasketResult[] = markets.map((market) => {
     let totalCost = 0;
     let itemsFound = 0;
@@ -68,8 +66,8 @@ export async function getMarketRecommendation(
         itemsMissing++;
       }
     }
-    const distanceKm = referencePoint
-      ? haversineDistanceKm(referencePoint.latitude, referencePoint.longitude, market.latitude, market.longitude)
+    const distanceKm = userLocation
+      ? haversineDistanceKm(userLocation.lat, userLocation.lng, market.latitude, market.longitude)
       : null;
     return { market, totalCost, itemsFound, itemsMissing, distanceKm, score: 0 };
   });

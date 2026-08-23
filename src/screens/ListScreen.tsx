@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, MapPin, Minus, Plus, Trash2, Trophy, Sparkles } from "lucide-react";
+import { LogIn, MapPin, Minus, Plus, Trash2, Trophy, Sparkles, TriangleAlert } from "lucide-react";
 import TopBar from "../components/TopBar";
-import Dropdown from "../components/Dropdown";
+import LocationPicker from "../components/LocationPicker";
 import EmptyState from "../components/EmptyState";
 import { useAuth } from "../lib/authContext";
 import { listMarkets } from "../lib/dataClient";
@@ -10,9 +10,10 @@ import {
   listMyShoppingList,
   removeFromShoppingList,
   updateShoppingListQuantity,
-  getUserBarangay,
-  setUserBarangay,
+  getUserLocation,
+  setUserLocation,
   type ShoppingListRow,
+  type SavedLocation,
 } from "../lib/shoppingList";
 import { getMarketRecommendation, type RecommendationResult } from "../lib/marketRecommendation";
 import { getItemEmoji } from "../lib/categoryIcons";
@@ -25,42 +26,58 @@ export default function ListScreen() {
 
   const [rows, setRows] = useState<ShoppingListRow[]>([]);
   const [markets, setMarkets] = useState<Market[]>([]);
-  const [barangay, setBarangay] = useState<string>("");
+  const [location, setLocation] = useState<SavedLocation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [computing, setComputing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+
     (async () => {
       setLoading(true);
-      const [listRows, marketList, savedBarangay] = await Promise.all([
-        listMyShoppingList(user.id),
-        listMarkets(),
-        getUserBarangay(user.id),
-      ]);
-      if (!cancelled) {
+      setLoadError(null);
+      try {
+        const [listRows, marketList, savedLocation] = await Promise.all([
+          listMyShoppingList(user.id),
+          listMarkets(),
+          getUserLocation(user.id),
+        ]);
+        if (cancelled) return;
         setRows(listRows);
         setMarkets(marketList);
-        setBarangay(savedBarangay ?? "");
-        setLoading(false);
+        setLocation(savedLocation);
+      } catch (err) {
+        // Without this catch, a failed query (e.g. a migration that hasn't
+        // been run yet) would leave `loading` stuck true forever with no
+        // feedback — just an endless skeleton and no way to know why.
+        if (!cancelled) {
+          setLoadError(
+            "Couldn't load your list. If this is a fresh setup, make sure the shopping list migration has been run in Supabase."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, [user]);
 
-  const barangayOptions = useMemo(() => {
-    const unique = Array.from(new Set(markets.map((m) => m.barangay)));
-    return unique.map((b) => ({ value: b, label: b }));
-  }, [markets]);
-
-  async function handleBarangayChange(value: string) {
-    setBarangay(value);
+  async function handleLocationChange(lat: number, lng: number) {
+    setLocation({ lat, lng });
     setRecommendation(null);
-    if (user) await setUserBarangay(user.id, value);
+    if (user) {
+      try {
+        await setUserLocation(user.id, lat, lng);
+      } catch {
+        // Non-fatal — the map still works for this session even if saving fails.
+      }
+    }
   }
 
   async function handleRemove(rowId: string) {
@@ -79,10 +96,10 @@ export default function ListScreen() {
   }
 
   async function handleFindBestMarket() {
-    if (!barangay) return;
+    if (!location) return;
     setComputing(true);
     try {
-      const result = await getMarketRecommendation(rows, markets, barangay);
+      const result = await getMarketRecommendation(rows, markets, location);
       setRecommendation(result);
     } finally {
       setComputing(false);
@@ -122,16 +139,22 @@ export default function ListScreen() {
             <MapPin size={15} className="text-palengke-green" strokeWidth={2.2} />
             <p className="text-sm font-semibold text-ink">Your location</p>
           </div>
-          <Dropdown
-            value={barangay}
-            options={barangayOptions}
-            onChange={handleBarangayChange}
-            placeholder="Select your barangay"
+          <LocationPicker
+            latitude={location?.lat ?? null}
+            longitude={location?.lng ?? null}
+            onChange={handleLocationChange}
           />
           <p className="text-ink-faint text-xs mt-2">
-            We use this to estimate which market is closest — no GPS needed.
+            Tap the map to drop a pin where you are — this estimates distance to nearby markets.
           </p>
         </div>
+
+        {loadError && (
+          <div className="bg-fresh-red/10 rounded-card p-4 flex items-start gap-2.5">
+            <TriangleAlert size={18} className="text-fresh-red shrink-0 mt-0.5" strokeWidth={2} />
+            <p className="text-fresh-red text-sm">{loadError}</p>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex flex-col gap-3">
@@ -139,7 +162,7 @@ export default function ListScreen() {
               <div key={i} className="h-[72px] rounded-card bg-white/60 animate-pulse" />
             ))}
           </div>
-        ) : rows.length === 0 ? (
+        ) : loadError ? null : rows.length === 0 ? (
           <EmptyState
             title="Your list is empty"
             description='Open any item&apos;s price page and tap "Add to my list" to start building your basket.'
@@ -188,7 +211,7 @@ export default function ListScreen() {
 
             <button
               onClick={handleFindBestMarket}
-              disabled={!barangay || computing}
+              disabled={!location || computing}
               className="w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px] disabled:opacity-40"
             >
               {computing ? "Comparing markets..." : "Find the best market for this list"}
@@ -228,11 +251,8 @@ export default function ListScreen() {
                 </div>
 
                 {recommendation.aiExplanation && (
-                  <div className="bg-cream-soft rounded-xl p-3 mb-3">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-2 py-0.5 mb-2">
-                      <Sparkles size={10} strokeWidth={2.6} />
-                      AI Suggestion
-                    </span>
+                  <div className="flex items-start gap-2 bg-cream-soft rounded-xl p-3 mb-3">
+                    <Sparkles size={15} className="text-palengke-gold-dark shrink-0 mt-0.5" strokeWidth={2} />
                     <p className="text-ink-soft text-xs leading-relaxed">{recommendation.aiExplanation}</p>
                   </div>
                 )}

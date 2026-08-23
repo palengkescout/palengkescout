@@ -56,15 +56,29 @@ export async function isItemInList(userId: string, itemId: string): Promise<bool
   return Boolean(data);
 }
 
-export async function getUserBarangay(userId: string): Promise<string | null> {
-  if (!isSupabaseConfigured || !supabase) return null;
-  const { data, error } = await supabase.from("profiles").select("barangay").eq("id", userId).single();
-  if (error) throw error;
-  return data?.barangay ?? null;
+export interface SavedLocation {
+  lat: number;
+  lng: number;
 }
 
-export async function setUserBarangay(userId: string, barangay: string): Promise<void> {
+/** Reads the user's pinned map location, saved from the click-to-place map. */
+export async function getUserLocation(userId: string): Promise<SavedLocation | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("location_lat, location_lng")
+    .eq("id", userId)
+    .single();
+  if (error) throw error;
+  if (data?.location_lat == null || data?.location_lng == null) return null;
+  return { lat: data.location_lat, lng: data.location_lng };
+}
+
+export async function setUserLocation(userId: string, lat: number, lng: number): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
-  const { error } = await supabase.from("profiles").update({ barangay }).eq("id", userId);
+  const { error } = await supabase
+    .from("profiles")
+    .update({ location_lat: lat, location_lng: lng })
+    .eq("id", userId);
   if (error) throw error;
 }

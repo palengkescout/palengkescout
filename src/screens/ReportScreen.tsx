@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Camera, X, Award, LogIn, Flame } from "lucide-react";
+import { CheckCircle2, Camera, X, Award, LogIn, Flame, TriangleAlert } from "lucide-react";
 import TopBar from "../components/TopBar";
 import Dropdown from "../components/Dropdown";
 import ReportSkeleton from "../components/ReportSkeleton";
@@ -8,6 +8,7 @@ import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
 import { useAuth } from "../lib/authContext";
+import { RateLimitError } from "../lib/rateLimit";
 import type { Item, Market, PriceStatus } from "../types";
 
 export default function ReportScreen() {
@@ -18,6 +19,7 @@ export default function ReportScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [markets, setMarkets] = useState<Market[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [itemId, setItemId] = useState(searchParams.get("item") ?? "");
   const [marketId, setMarketId] = useState("");
   const [price, setPrice] = useState("");
@@ -34,19 +36,25 @@ export default function ReportScreen() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  async function loadCatalog() {
+    setItemsLoading(true);
+    setCatalogError(null);
+    try {
       const [itemList, marketList] = await Promise.all([listItems(), listMarkets()]);
-      if (cancelled) return;
       setItems(itemList);
       setMarkets(marketList);
-      if (!itemId && itemList.length) setItemId(itemList[0].id);
+      setItemId((current) => current || (itemList.length ? itemList[0].id : ""));
+    } catch {
+      // Previously this fetch had no .catch() at all — a failed request
+      // would leave the skeleton spinning forever with no explanation.
+      setCatalogError("Couldn't load items and markets. Check your connection and try again.");
+    } finally {
       setItemsLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    }
+  }
+
+  useEffect(() => {
+    loadCatalog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -99,8 +107,12 @@ export default function ReportScreen() {
         userId: user?.id,
       });
       setResult({ pointsAwarded, totalPoints, status: report.status, multiplierApplied });
-    } catch {
-      setError("Something went wrong saving your report. Please try again.");
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        setError(err.message);
+      } else {
+        setError("Something went wrong saving your report. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -156,6 +168,27 @@ export default function ReportScreen() {
         <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
         <div className="app-content px-5 pt-5 pb-8">
           <ReportSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (catalogError) {
+    return (
+      <div className="app-shell bg-cream">
+        <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
+        <div className="app-content flex flex-col items-center justify-center px-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-fresh-red/10 flex items-center justify-center mb-4">
+            <TriangleAlert size={26} className="text-fresh-red" strokeWidth={2} />
+          </div>
+          <p className="font-display text-lg text-ink mb-1.5">Couldn't load the form</p>
+          <p className="text-ink-soft text-sm max-w-[30ch] mb-6">{catalogError}</p>
+          <button
+            onClick={loadCatalog}
+            className="w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px]"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import ItemCard from "../components/ItemCard";
@@ -17,26 +17,33 @@ export default function HomeScreen() {
   const [topScoutIds, setTopScoutIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  const loadHome = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
       const [itemList, lowest, board] = await Promise.all([
         listItems(),
         listLowestPrices(),
         getLeaderboard("week"),
       ]);
-      if (!cancelled) {
-        setItems(itemList);
-        setLowestPrices(lowest);
-        setTopScoutIds(new Set(board.slice(0, 3).map((e) => e.userId)));
-        setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setItems(itemList);
+      setLowestPrices(lowest);
+      setTopScoutIds(new Set(board.slice(0, 3).map((e) => e.userId)));
+    } catch {
+      // Without this catch, a failed fetch (network blip, Supabase
+      // unreachable) would leave `loading` stuck true forever — an endless
+      // skeleton with no explanation and no way to recover.
+      setLoadError("Couldn't load items right now. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadHome();
+  }, [loadHome]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return items;
@@ -94,6 +101,13 @@ export default function HomeScreen() {
 
         {loading ? (
           <HomeSkeleton />
+        ) : loadError ? (
+          <EmptyState
+            title="Couldn't load items"
+            description={loadError}
+            actionLabel="Try again"
+            onAction={loadHome}
+          />
         ) : grouped.length === 0 ? (
           <EmptyState
             title="No matching items"

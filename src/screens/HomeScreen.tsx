@@ -16,6 +16,7 @@ export default function HomeScreen() {
   const [lowestPrices, setLowestPrices] = useState<Record<string, LowestPriceInfo | null>>({});
   const [topScoutIds, setTopScoutIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -45,11 +46,23 @@ export default function HomeScreen() {
     loadHome();
   }, [loadHome]);
 
+  // Categories derived from whatever items are actually loaded — no extra
+  // fetch needed, and the list naturally stays in sync if items change.
+  const categories = useMemo(() => {
+    return Array.from(new Set(items.map((i) => i.category))).sort();
+  }, [items]);
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return items;
-    const q = query.trim().toLowerCase();
-    return items.filter((i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
-  }, [items, query]);
+    let list = items;
+    if (selectedCategory) {
+      list = list.filter((i) => i.category === selectedCategory);
+    }
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      list = list.filter((i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+    }
+    return list;
+  }, [items, query, selectedCategory]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Item[]>();
@@ -77,7 +90,7 @@ export default function HomeScreen() {
         <label htmlFor="search" className="sr-only">
           Search for an item
         </label>
-        <div className="relative mb-5">
+        <div className="relative mb-4">
           <svg
             className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
             width="18"
@@ -99,6 +112,34 @@ export default function HomeScreen() {
           />
         </div>
 
+        {!loading && !loadError && categories.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto -mx-5 px-5 mb-5" style={{ scrollbarWidth: "none" }}>
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`shrink-0 px-3.5 py-2 rounded-pill text-sm font-medium whitespace-nowrap min-h-[36px] ${
+                selectedCategory === null
+                  ? "bg-palengke-green text-white"
+                  : "bg-white text-ink-soft shadow-card"
+              }`}
+            >
+              All
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`shrink-0 px-3.5 py-2 rounded-pill text-sm font-medium whitespace-nowrap min-h-[36px] ${
+                  selectedCategory === category
+                    ? "bg-palengke-green text-white"
+                    : "bg-white text-ink-soft shadow-card"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading ? (
           <HomeSkeleton />
         ) : loadError ? (
@@ -111,7 +152,7 @@ export default function HomeScreen() {
         ) : grouped.length === 0 ? (
           <EmptyState
             title="No matching items"
-            description="Try a different search, or be the first to add a price report for something new."
+            description="Try a different search or category, or be the first to add a price report for something new."
             actionLabel="Report a price"
             onAction={handleReportAction}
           />

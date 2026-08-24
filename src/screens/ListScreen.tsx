@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, MapPin, Minus, Plus, Trash2, Trophy, Sparkles, TriangleAlert } from "lucide-react";
+import { LogIn, MapPin, Minus, Plus, Trash2, Trophy, Sparkles, TriangleAlert, ChevronRight } from "lucide-react";
 import TopBar from "../components/TopBar";
-import LocationPicker from "../components/LocationPicker";
 import EmptyState from "../components/EmptyState";
 import { useAuth } from "../lib/authContext";
 import { listMarkets } from "../lib/dataClient";
@@ -11,7 +10,6 @@ import {
   removeFromShoppingList,
   updateShoppingListQuantity,
   getUserLocation,
-  setUserLocation,
   type ShoppingListRow,
   type SavedLocation,
 } from "../lib/shoppingList";
@@ -68,18 +66,6 @@ export default function ListScreen() {
     };
   }, [user]);
 
-  async function handleLocationChange(lat: number, lng: number) {
-    setLocation({ lat, lng });
-    setRecommendation(null);
-    if (user) {
-      try {
-        await setUserLocation(user.id, lat, lng);
-      } catch {
-        // Non-fatal — the map still works for this session even if saving fails.
-      }
-    }
-  }
-
   async function handleRemove(rowId: string) {
     await removeFromShoppingList(rowId);
     setRows((prev) => prev.filter((r) => r.id !== rowId));
@@ -134,20 +120,30 @@ export default function ListScreen() {
       <TopBar title="My List" subtitle="Compare a full basket across markets." />
 
       <div className="app-content px-5 pt-4 pb-8 flex flex-col gap-5">
-        <div className="bg-white rounded-card shadow-card p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <MapPin size={15} className="text-palengke-green" strokeWidth={2.2} />
-            <p className="text-sm font-semibold text-ink">Your location</p>
+        {/* Compact, read-only location summary — editing now lives only on
+            Profile, so this can never disagree with what's saved there. */}
+        <button
+          onClick={() => navigate("/profile")}
+          className="bg-white rounded-card shadow-card p-4 flex items-center justify-between gap-3 text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-palengke-green/10 flex items-center justify-center shrink-0">
+              <MapPin size={16} className="text-palengke-green" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">
+                {location ? "Using your saved location" : "No location set"}
+              </p>
+              <p className="text-ink-faint text-xs truncate">
+                {location ? "Distance to markets is estimated from this" : "Set it to see distance to markets"}
+              </p>
+            </div>
           </div>
-          <LocationPicker
-            latitude={location?.lat ?? null}
-            longitude={location?.lng ?? null}
-            onChange={handleLocationChange}
-          />
-          <p className="text-ink-faint text-xs mt-2">
-            Tap the map to drop a pin where you are — this estimates distance to nearby markets.
-          </p>
-        </div>
+          <div className="flex items-center gap-1 shrink-0 text-palengke-green text-xs font-semibold">
+            {location ? "Change" : "Set location"}
+            <ChevronRight size={14} strokeWidth={2.4} />
+          </div>
+        </button>
 
         {loadError && (
           <div className="bg-fresh-red/10 rounded-card p-4 flex items-start gap-2.5">
@@ -214,7 +210,11 @@ export default function ListScreen() {
               disabled={!location || computing}
               className="w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px] disabled:opacity-40"
             >
-              {computing ? "Comparing markets..." : "Find the best market for this list"}
+              {computing
+                ? "Comparing markets..."
+                : !location
+                ? "Set your location above to compare markets"
+                : "Find the best market for this list"}
             </button>
 
             {recommendation && recommendation.best && (

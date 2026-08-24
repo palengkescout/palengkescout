@@ -59,3 +59,44 @@ export async function signOut(): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   await supabase.auth.signOut();
 }
+
+export interface UpdateProfileInput {
+  displayName?: string;
+  barangay?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
+}
+
+export interface UpdateProfileResult {
+  error?: string;
+}
+
+/**
+ * Writes profile fields to the `profiles` table. Only the fields actually
+ * passed in are updated, so callers can save just the location without
+ * touching displayName, etc.
+ *
+ * Uses upsert (not a plain update) for the same reason shoppingList.ts's
+ * setUserLocation does: an account with no profiles row yet — e.g. one
+ * created before the profile auto-creation trigger existed — would have a
+ * plain .update() silently affect zero rows and look like a successful
+ * save that did nothing. Upsert guarantees the row exists.
+ */
+export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<UpdateProfileResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: "Accounts aren't available in this build yet." };
+  }
+
+  const payload: Record<string, unknown> = { id: userId };
+  if (input.displayName !== undefined) payload.display_name = input.displayName;
+  if (input.barangay !== undefined) payload.barangay = input.barangay;
+  if (input.locationLat !== undefined) payload.location_lat = input.locationLat;
+  if (input.locationLng !== undefined) payload.location_lng = input.locationLng;
+
+  // Only "id" present means no actual field was passed — nothing to save.
+  if (Object.keys(payload).length === 1) return {};
+
+  const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+  if (error) return { error: error.message };
+  return {};
+}

@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { LogIn, LogOut, Trophy, Award, CircleCheck, CircleAlert, Clock, Flame, Crown, TriangleAlert } from "lucide-react";
+import {
+  LogIn,
+  LogOut,
+  Trophy,
+  Award,
+  CircleCheck,
+  CircleAlert,
+  Clock,
+  Flame,
+  Crown,
+  TriangleAlert,
+  MapPin,
+  Check,
+} from "lucide-react";
 import TopBar from "../components/TopBar";
 import ProfileSkeleton from "../components/ProfileSkeleton";
+import LocationPicker from "../components/LocationPicker";
 import { useAuth } from "../lib/authContext";
-import { signOut } from "../lib/authClient";
+import { signOut, updateProfile } from "../lib/authClient";
 import { getTotalPoints } from "../lib/points";
 import { getReporterStats, tierLabel, type ReporterStats } from "../lib/reputation";
 import {
@@ -29,6 +43,18 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Location — pin coordinates + barangay label, loaded from the saved
+  // profile and only written back to Supabase when the person taps Save.
+  const [barangay, setBarangay] = useState("");
+  const [savedBarangay, setSavedBarangay] = useState("");
+  const [savedLat, setSavedLat] = useState<number | null>(null);
+  const [savedLng, setSavedLng] = useState<number | null>(null);
+  const [pendingLat, setPendingLat] = useState<number | null>(null);
+  const [pendingLng, setPendingLng] = useState<number | null>(null);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationSaved, setLocationSaved] = useState(false);
+
   const loadProfile = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -38,13 +64,24 @@ export default function ProfileScreen() {
         getTotalPoints(user.id),
         getReporterStats(user.id),
         supabase
-          ? supabase.from("profiles").select("display_name").eq("id", user.id).single()
+          ? supabase
+              .from("profiles")
+              .select("display_name, barangay, location_lat, location_lng")
+              .eq("id", user.id)
+              .single()
           : Promise.resolve({ data: null }),
         isEligibleForMultiplier(user.id),
       ]);
+      const row = (profileRow as any)?.data ?? null;
       setPoints(total);
       setStats(reporterStats);
-      setDisplayName((profileRow as any)?.data?.display_name ?? user.email ?? "Scout");
+      setDisplayName(row?.display_name ?? user.email ?? "Scout");
+      setBarangay(row?.barangay ?? "");
+      setSavedBarangay(row?.barangay ?? "");
+      setSavedLat(row?.location_lat ?? null);
+      setSavedLng(row?.location_lng ?? null);
+      setPendingLat(row?.location_lat ?? null);
+      setPendingLng(row?.location_lng ?? null);
       setMultiplierEligible(eligible);
     } catch {
       // Previously this had no .catch() — a failed request left `loading`
@@ -72,6 +109,30 @@ export default function ProfileScreen() {
       .then(setHallOfFame)
       .catch(() => setHallOfFame([]));
   }, [user, hofPeriod]);
+
+  const locationDirty = pendingLat !== savedLat || pendingLng !== savedLng || barangay !== savedBarangay;
+
+  async function handleSaveLocation() {
+    if (!user) return;
+    setSavingLocation(true);
+    setLocationError(null);
+    setLocationSaved(false);
+    const result = await updateProfile(user.id, {
+      barangay: barangay.trim() || null,
+      locationLat: pendingLat,
+      locationLng: pendingLng,
+    });
+    setSavingLocation(false);
+    if (result.error) {
+      setLocationError(result.error);
+      return;
+    }
+    setSavedLat(pendingLat);
+    setSavedLng(pendingLng);
+    setSavedBarangay(barangay.trim());
+    setLocationSaved(true);
+    setTimeout(() => setLocationSaved(false), 3000);
+  }
 
   if (!authLoading && !user) {
     return (
@@ -185,6 +246,65 @@ export default function ProfileScreen() {
             </div>
           </div>
         )}
+
+        {/* Your Location — the piece that was missing entirely. LocationPicker
+            existed as a component but was never rendered anywhere, and there
+            was no function that wrote its output back to Supabase. */}
+        <div className="bg-white rounded-card shadow-card p-4">
+          <div className="flex items-center gap-1.5 mb-1">
+            <MapPin size={16} className="text-palengke-green" strokeWidth={2.2} />
+            <p className="font-semibold text-ink text-sm">Your Location</p>
+          </div>
+          <p className="text-ink-faint text-xs mb-3">
+            Used to show you nearby prices first. Only visible to you.
+          </p>
+
+          <label htmlFor="barangay" className="block text-xs font-semibold text-ink mb-1.5">
+            Barangay
+          </label>
+          <input
+            id="barangay"
+            type="text"
+            placeholder="e.g. Poblacion"
+            value={barangay}
+            onChange={(e) => setBarangay(e.target.value)}
+            className="w-full bg-cream-soft rounded-card px-4 py-3 text-[15px] outline-none min-h-[46px] mb-3"
+          />
+
+          <label className="block text-xs font-semibold text-ink mb-1.5">Pin your location</label>
+          <LocationPicker
+            latitude={pendingLat}
+            longitude={pendingLng}
+            onChange={(lat, lng) => {
+              setPendingLat(lat);
+              setPendingLng(lng);
+              setLocationSaved(false);
+            }}
+          />
+
+          {locationError && (
+            <p role="alert" className="text-fresh-red text-xs mt-3">
+              {locationError}
+            </p>
+          )}
+
+          <button
+            onClick={handleSaveLocation}
+            disabled={savingLocation || !locationDirty}
+            className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-pill bg-palengke-green text-white font-semibold text-sm min-h-[46px] disabled:opacity-40"
+          >
+            {locationSaved ? (
+              <>
+                <Check size={16} strokeWidth={2.4} />
+                Saved
+              </>
+            ) : savingLocation ? (
+              "Saving..."
+            ) : (
+              "Save location"
+            )}
+          </button>
+        </div>
 
         <div className="bg-white rounded-card shadow-card p-4">
           <div className="flex items-center justify-between mb-3">

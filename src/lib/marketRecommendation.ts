@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from "./supabaseClient";
 import type { Market } from "../types";
 import type { ShoppingListRow, SavedLocation } from "./shoppingList";
 import { haversineDistanceKm } from "./geo";
+import { normalize, PRICE_WEIGHT, DISTANCE_WEIGHT } from "./smartScore";
 
 export interface MarketBasketResult {
   market: Market;
@@ -16,14 +17,6 @@ export interface RecommendationResult {
   ranked: MarketBasketResult[];
   best: MarketBasketResult | null;
   aiExplanation: string | null;
-}
-
-const PRICE_WEIGHT = 0.65;
-const DISTANCE_WEIGHT = 0.35;
-
-function normalize(value: number, min: number, max: number): number {
-  if (max === min) return 0;
-  return (value - min) / (max - min);
 }
 
 export async function getMarketRecommendation(

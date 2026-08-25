@@ -40,3 +40,10 @@ export interface PriceReport {
 export interface PriceRowData extends PriceReport {
   market: Market;
 }
+
+/** A report joined with its item and market — used on the My Reports
+ * screen, where a single list spans many different items. */
+export interface MyReportRow extends PriceReport {
+  item: Item;
+  market: Market;
+}

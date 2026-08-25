@@ -1,10 +1,10 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
-import { recordPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
+import { recordPoints, getTotalPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
 import { evaluateReportStatus } from "./verification";
 import { isEligibleForMultiplier } from "./leaderboard";
 import { enforceReportCooldown } from "./rateLimit";
-import type { Item, Market, PriceReport, PriceRowData } from "../types";
+import type { Item, Market, MyReportRow, PriceReport, PriceRowData } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
 
@@ -130,6 +130,31 @@ export async function listLowestPrices(): Promise<Record<string, LowestPriceInfo
   return result;
 }
 
+/**
+ * Upgrades other pending reports to "verified" once a new/edited report
+ * anchors a large-enough consensus cluster (see verification.ts).
+ *
+ * This is a cross-user UPDATE — it touches rows that don't belong to the
+ * caller — and price_reports has no RLS policy permitting that (by
+ * design; see migration 007's comments on why a broader policy would be
+ * unsafe). Until that's replaced with a proper SECURITY DEFINER function
+ * that re-derives the upgrade set server-side, this call is expected to
+ * fail under RLS. It's wrapped here so that expected failure can never
+ * take down the report the person actually just submitted or edited —
+ * previously it did exactly that, because the un-caught error propagated
+ * up and rejected the whole reportPrice()/updateMyReport() call even
+ * though the primary row had already saved successfully.
+ */
+async function tryUpgradeMatchingReports(ids: string[]): Promise<void> {
+  if (ids.length === 0 || !supabase) return;
+  try {
+    const { error } = await supabase.from("price_reports").update({ status: "verified" }).in("id", ids);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Could not upgrade matching reports to verified (likely RLS — see migration 007 notes):", err);
+  }
+}
+
 export interface ReportPriceInput {
   itemId: string;
   marketId: string;
@@ -215,13 +240,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
       .single();
     if (error) throw error;
 
-    if (evaluation.upgradeReportIds.length > 0) {
-      const { error: upgradeError } = await supabase
-        .from("price_reports")
-        .update({ status: "verified" })
-        .in("id", evaluation.upgradeReportIds);
-      if (upgradeError) throw upgradeError;
-    }
+    await tryUpgradeMatchingReports(evaluation.upgradeReportIds);
 
     const totalPoints = await recordPoints({
       userId: input.userId,
@@ -284,4 +303,208 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
 
   const totalPoints = await recordPoints({ userId: input.userId, points: pointsAwarded, reason });
   return { report: newReport, pointsAwarded, totalPoints, multiplierApplied };
+}
+
+/** All of a user's own reports, joined with item + market, newest first. */
+export async function listMyReports(userId: string): Promise<MyReportRow[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from("price_reports")
+      .select("*, item:items(*), market:markets(*)")
+      .eq("user_id", userId)
+      .order("reported_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      itemId: row.item_id,
+      marketId: row.market_id,
+      price: Number(row.price),
+      status: row.status,
+      reportedAt: row.reported_at,
+      reporterName: row.reporter_name,
+      photoUrl: row.photo_url ?? undefined,
+      userId: row.user_id ?? undefined,
+      item: row.item,
+      market: row.market,
+    }));
+  }
+
+  const reports = loadMockReports().filter((r) => r.userId === userId);
+  return reports
+    .map((r) => {
+      const item = seedItems.find((i) => i.id === r.itemId);
+      const market = seedMarkets.find((m) => m.id === r.marketId);
+      if (!item || !market) return null;
+      return { ...r, item, market } satisfies MyReportRow;
+    })
+    .filter((r): r is MyReportRow => r !== null)
+    .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
+}
+
+export interface UpdateReportInput {
+  reportId: string;
+  userId: string;
+  newPrice: number;
+}
+
+export interface UpdateReportResult {
+  report: PriceReport;
+}
+
+/**
+ * Edits a report's price and re-runs the same verification logic used for
+ * new reports — the edited price can move to verified, pending, or
+ * flagged depending on how it now compares to other reports at that
+ * market. The report being edited is excluded from its own comparison set.
+ */
+export async function updateMyReport(input: UpdateReportInput): Promise<UpdateReportResult> {
+  if (isSupabaseConfigured && supabase) {
+    const { data: current, error: currentError } = await supabase
+      .from("price_reports")
+      .select("item_id, market_id, user_id")
+      .eq("id", input.reportId)
+      .single();
+    if (currentError) throw currentError;
+    if (current.user_id !== input.userId) throw new Error("You can only edit your own reports.");
+
+    const { data: existing, error: existingError } = await supabase
+      .from("price_reports")
+      .select("id, price, status")
+      .eq("item_id", current.item_id)
+      .eq("market_id", current.market_id)
+      .neq("id", input.reportId)
+      .order("reported_at", { ascending: false })
+      .limit(50);
+    if (existingError) throw existingError;
+
+    const evaluation = evaluateReportStatus(
+      input.newPrice,
+      (existing ?? []).map((r) => ({ id: r.id, price: Number(r.price), status: r.status }))
+    );
+
+    const { data, error } = await supabase
+      .from("price_reports")
+      .update({ price: input.newPrice, status: evaluation.status })
+      .eq("id", input.reportId)
+      .eq("user_id", input.userId)
+      .select()
+      .single();
+    if (error) throw error;
+
+    await tryUpgradeMatchingReports(evaluation.upgradeReportIds);
+
+    return {
+      report: {
+        id: data.id,
+        itemId: data.item_id,
+        marketId: data.market_id,
+        price: Number(data.price),
+        status: data.status,
+        reportedAt: data.reported_at,
+        reporterName: data.reporter_name,
+        photoUrl: data.photo_url ?? undefined,
+        userId: data.user_id ?? undefined,
+      },
+    };
+  }
+
+  // Mock/local-dev branch.
+  const reports = loadMockReports();
+  const target = reports.find((r) => r.id === input.reportId && r.userId === input.userId);
+  if (!target) throw new Error("Report not found.");
+
+  const others = reports.filter(
+    (r) => r.id !== input.reportId && r.itemId === target.itemId && r.marketId === target.marketId
+  );
+  const evaluation = evaluateReportStatus(input.newPrice, others);
+
+  const updated = reports.map((r) => {
+    if (r.id === input.reportId) return { ...r, price: input.newPrice, status: evaluation.status };
+    if (evaluation.upgradeReportIds.includes(r.id)) return { ...r, status: "verified" as const };
+    return r;
+  });
+  saveMockReports(updated);
+
+  const updatedReport = updated.find((r) => r.id === input.reportId)!;
+  return { report: updatedReport };
+}
+
+export interface DeleteReportResult {
+  pointsClawedBack: number;
+  totalPoints: number;
+}
+
+/**
+ * Deletes a report. Points earned from it are only clawed back if the
+ * report was NOT verified at the time of deletion — a verified report
+ * keeps its points permanently, even after deletion, per product rule.
+ *
+ * The clawback is recorded as a new, independent negative point_events
+ * entry rather than deleting the original one. That keeps a clean audit
+ * trail (an unexplained missing point_events row is much harder to
+ * reason about later than a visible "-15" entry), and sidesteps any
+ * foreign-key/cascade complications from the report row being deleted
+ * out from under it — the compensating entry isn't linked to a
+ * price_report_id at all.
+ *
+ * Reuses the existing "report" reason literal rather than introducing a
+ * new "report_deleted" value, since point_events.reason may have a
+ * database CHECK constraint restricting it to known values — worth
+ * confirming if you want clawback entries to read distinctly in a future
+ * points-history view.
+ */
+export async function deleteMyReport(reportId: string, userId: string): Promise<DeleteReportResult> {
+  if (isSupabaseConfigured && supabase) {
+    const { data: current, error: currentError } = await supabase
+      .from("price_reports")
+      .select("status, user_id")
+      .eq("id", reportId)
+      .single();
+    if (currentError) throw currentError;
+    if (current.user_id !== userId) throw new Error("You can only delete your own reports.");
+
+    let pointsClawedBack = 0;
+    if (current.status !== "verified") {
+      const { data: events, error: eventsError } = await supabase
+        .from("point_events")
+        .select("points")
+        .eq("price_report_id", reportId);
+      if (eventsError) throw eventsError;
+      pointsClawedBack = (events ?? []).reduce((sum, e) => sum + e.points, 0);
+
+      if (pointsClawedBack > 0) {
+        await recordPoints({ userId, points: -pointsClawedBack, reason: "report" });
+      }
+    }
+
+    const { error: deleteError } = await supabase
+      .from("price_reports")
+      .delete()
+      .eq("id", reportId)
+      .eq("user_id", userId);
+    if (deleteError) throw deleteError;
+
+    const totalPoints = await getTotalPoints(userId);
+    return { pointsClawedBack, totalPoints };
+  }
+
+  // Mock/local-dev branch.
+  const reports = loadMockReports();
+  const target = reports.find((r) => r.id === reportId && r.userId === userId);
+  if (!target) throw new Error("Report not found.");
+
+  let pointsClawedBack = 0;
+  if (target.status !== "verified") {
+    pointsClawedBack = target.pointsAwarded ?? 0;
+  }
+
+  const updated = reports.filter((r) => r.id !== reportId);
+  saveMockReports(updated);
+
+  const totalPoints =
+    pointsClawedBack > 0
+      ? await recordPoints({ userId, points: -pointsClawedBack, reason: "report" })
+      : await getTotalPoints(userId);
+
+  return { pointsClawedBack, totalPoints };
 }

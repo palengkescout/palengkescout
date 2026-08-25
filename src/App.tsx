@@ -5,6 +5,7 @@ import ItemPricesScreen from "./screens/ItemPricesScreen";
 import ReportScreen from "./screens/ReportScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import ListScreen from "./screens/ListScreen";
+import MyReportsScreen from "./screens/MyReportsScreen";
 import AdminMarketsScreen from "./screens/AdminMarketsScreen";
 import { AuthProvider } from "./lib/authContext";
 
@@ -21,6 +22,8 @@ export default function App() {
             <Route path="/report" element={<ReportScreen />} />
             <Route path="/list" element={<ListScreen />} />
             <Route path="/profile" element={<ProfileScreen />} />
+            {/* Reachable from Profile, not its own bottom-nav tab. */}
+            <Route path="/my-reports" element={<MyReportsScreen />} />
             {/* Intentionally not in BottomNav — reachable only by direct URL. */}
             <Route path="/admin/markets" element={<AdminMarketsScreen />} />
           </Routes>

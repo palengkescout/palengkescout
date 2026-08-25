@@ -13,6 +13,8 @@ import {
   TriangleAlert,
   MapPin,
   Check,
+  FileText,
+  ChevronRight,
 } from "lucide-react";
 import TopBar from "../components/TopBar";
 import ProfileSkeleton from "../components/ProfileSkeleton";
@@ -48,6 +50,9 @@ export default function ProfileScreen() {
   const [hallOfFame, setHallOfFame] = useState<PeriodWinner[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Location — pin coordinates + barangay label, loaded from the saved
+  // profile and only written back to Supabase when the person taps Save.
   const [barangay, setBarangay] = useState("");
   const [savedBarangay, setSavedBarangay] = useState("");
   const [savedLat, setSavedLat] = useState<number | null>(null);
@@ -87,6 +92,8 @@ export default function ProfileScreen() {
       setPendingLng(row?.location_lng ?? null);
       setMultiplierEligible(eligible);
     } catch {
+      // Previously this had no .catch() — a failed request left `loading`
+      // stuck true forever, an endless skeleton with no explanation.
       setLoadError("Couldn't load your profile right now. Check your connection and try again.");
     } finally {
       setLoading(false);
@@ -209,7 +216,7 @@ export default function ProfileScreen() {
           {multiplierEligible && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-palengke-green rounded-pill px-3 py-1.5 w-fit mb-3">
               <Flame size={13} strokeWidth={2.4} />
-              1.5x points active this week, you were Top 3 last week!
+              1.5x points active this week — you were Top 3 last week!
             </div>
           )}
 
@@ -221,7 +228,7 @@ export default function ProfileScreen() {
                   ? `${stats.nextTier.verifiedNeeded} more verified report${
                       stats.nextTier.verifiedNeeded === 1 ? "" : "s"
                     } to reach ${tierLabel(stats.nextTier.tier)}`
-                  : "You've reached the highest tier - thank you for keeping prices honest."}
+                  : "You've reached the highest tier — thank you for keeping prices honest."}
               </p>
             </div>
           )}
@@ -246,6 +253,19 @@ export default function ProfileScreen() {
             </div>
           </div>
         )}
+
+        <button
+          onClick={() => navigate("/my-reports")}
+          className="bg-white rounded-card shadow-card p-4 flex items-center justify-between gap-3 text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-palengke-green/10 flex items-center justify-center shrink-0">
+              <FileText size={16} className="text-palengke-green" strokeWidth={2.2} />
+            </div>
+            <p className="text-sm font-semibold text-ink">View my reports</p>
+          </div>
+          <ChevronRight size={16} className="text-ink-faint shrink-0" strokeWidth={2.4} />
+        </button>
 
         {/* Your Location */}
         <div className="bg-white rounded-card shadow-card p-4">
@@ -328,7 +348,7 @@ export default function ProfileScreen() {
 
           {leaderboard.length === 0 ? (
             <p className="text-ink-faint text-xs py-6 text-center">
-              No points logged yet for this period.
+              No points logged yet for this period — be the first!
             </p>
           ) : (
             <>
@@ -340,7 +360,7 @@ export default function ProfileScreen() {
                   onClick={() => navigate("/report")}
                   className="w-full text-center text-xs font-semibold text-palengke-green mt-3 pt-3 border-t border-dashed border-black/10"
                 >
-                  Report a price to join the leaderboard this {period === "week" ? "week" : "month"}
+                  Report a price to join the leaderboard this {period === "week" ? "week" : "month"} →
                 </button>
               ) : (
                 myRank >= 10 &&

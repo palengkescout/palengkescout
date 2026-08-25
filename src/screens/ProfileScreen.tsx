@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LogIn,
   LogOut,
@@ -16,6 +17,10 @@ import {
 import TopBar from "../components/TopBar";
 import ProfileSkeleton from "../components/ProfileSkeleton";
 import LocationPicker from "../components/LocationPicker";
+import Avatar from "../components/Avatar";
+import LeaderboardPodium from "../components/LeaderboardPodium";
+import LeaderboardList from "../components/LeaderboardList";
+import HallOfFameList from "../components/HallOfFameList";
 import { useAuth } from "../lib/authContext";
 import { signOut, updateProfile } from "../lib/authClient";
 import { getTotalPoints } from "../lib/points";
@@ -31,6 +36,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 
 export default function ProfileScreen() {
+  const navigate = useNavigate();
   const { user, loading: authLoading, openAuthModal } = useAuth();
   const [displayName, setDisplayName] = useState<string>("");
   const [points, setPoints] = useState<number | null>(null);
@@ -42,9 +48,6 @@ export default function ProfileScreen() {
   const [hallOfFame, setHallOfFame] = useState<PeriodWinner[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  // Location — pin coordinates + barangay label, loaded from the saved
-  // profile and only written back to Supabase when the person taps Save.
   const [barangay, setBarangay] = useState("");
   const [savedBarangay, setSavedBarangay] = useState("");
   const [savedLat, setSavedLat] = useState<number | null>(null);
@@ -84,8 +87,6 @@ export default function ProfileScreen() {
       setPendingLng(row?.location_lng ?? null);
       setMultiplierEligible(eligible);
     } catch {
-      // Previously this had no .catch() — a failed request left `loading`
-      // stuck true forever, an endless skeleton with no explanation.
       setLoadError("Couldn't load your profile right now. Check your connection and try again.");
     } finally {
       setLoading(false);
@@ -190,7 +191,6 @@ export default function ProfileScreen() {
   }
 
   const myRank = leaderboard.findIndex((e) => e.userId === user?.id);
-  const topTen = leaderboard.slice(0, 10);
 
   return (
     <div className="app-shell bg-cream">
@@ -209,7 +209,7 @@ export default function ProfileScreen() {
           {multiplierEligible && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-palengke-green rounded-pill px-3 py-1.5 w-fit mb-3">
               <Flame size={13} strokeWidth={2.4} />
-              1.5x points active this week — you were Top 3 last week!
+              1.5x points active this week, you were Top 3 last week!
             </div>
           )}
 
@@ -221,7 +221,7 @@ export default function ProfileScreen() {
                   ? `${stats.nextTier.verifiedNeeded} more verified report${
                       stats.nextTier.verifiedNeeded === 1 ? "" : "s"
                     } to reach ${tierLabel(stats.nextTier.tier)}`
-                  : "You've reached the highest tier — thank you for keeping prices honest."}
+                  : "You've reached the highest tier - thank you for keeping prices honest."}
               </p>
             </div>
           )}
@@ -247,9 +247,7 @@ export default function ProfileScreen() {
           </div>
         )}
 
-        {/* Your Location — the piece that was missing entirely. LocationPicker
-            existed as a component but was never rendered anywhere, and there
-            was no function that wrote its output back to Supabase. */}
+        {/* Your Location */}
         <div className="bg-white rounded-card shadow-card p-4">
           <div className="flex items-center gap-1.5 mb-1">
             <MapPin size={16} className="text-palengke-green" strokeWidth={2.2} />
@@ -306,8 +304,9 @@ export default function ProfileScreen() {
           </button>
         </div>
 
+        {/* Leaderboard — podium for top 3, ranked list for 4–10 */}
         <div className="bg-white rounded-card shadow-card p-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-1.5">
               <Trophy size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
               <p className="font-semibold text-ink text-sm">Leaderboard</p>
@@ -327,46 +326,40 @@ export default function ProfileScreen() {
             </div>
           </div>
 
-          {topTen.length === 0 ? (
-            <p className="text-ink-faint text-xs py-4 text-center">
-              No points logged yet for this period — be the first!
+          {leaderboard.length === 0 ? (
+            <p className="text-ink-faint text-xs py-6 text-center">
+              No points logged yet for this period.
             </p>
           ) : (
-            <ul className="flex flex-col gap-1">
-              {topTen.map((entry, i) => {
-                const isMe = entry.userId === user?.id;
-                return (
-                  <li
-                    key={entry.userId}
-                    className={`flex items-center gap-3 px-2.5 py-2 rounded-xl ${
-                      isMe ? "bg-palengke-green/10" : ""
-                    }`}
-                  >
-                    <span
-                      className={`w-6 text-center text-xs font-bold ${
-                        i === 0 ? "text-palengke-gold-dark" : i < 3 ? "text-ink-soft" : "text-ink-faint"
-                      }`}
-                    >
-                      {i + 1}
-                    </span>
-                    <span className={`flex-1 text-sm truncate ${isMe ? "font-semibold text-ink" : "text-ink-soft"}`}>
-                      {entry.displayName}
-                      {isMe && " (you)"}
-                    </span>
-                    <span className="text-sm font-semibold text-palengke-green">{entry.points} pts</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+            <>
+              <LeaderboardPodium top3={leaderboard.slice(0, 3)} currentUserId={user?.id} />
+              <LeaderboardList entries={leaderboard.slice(3, 10)} startRank={4} currentUserId={user?.id} />
 
-          {myRank >= 10 && (
-            <p className="text-ink-faint text-xs text-center mt-3 pt-3 border-t border-black/5">
-              You're #{myRank + 1} this {period}
-            </p>
+              {myRank === -1 ? (
+                <button
+                  onClick={() => navigate("/report")}
+                  className="w-full text-center text-xs font-semibold text-palengke-green mt-3 pt-3 border-t border-dashed border-black/10"
+                >
+                  Report a price to join the leaderboard this {period === "week" ? "week" : "month"}
+                </button>
+              ) : (
+                myRank >= 10 &&
+                leaderboard[myRank] && (
+                  <div className="flex items-center gap-2.5 px-2.5 py-2.5 mt-2 pt-3 border-t border-dashed border-black/10">
+                    <span className="w-5 text-center text-xs font-bold text-ink-faint shrink-0">{myRank + 1}</span>
+                    <Avatar name={leaderboard[myRank].displayName} size={28} />
+                    <span className="flex-1 text-sm font-semibold text-ink truncate">You</span>
+                    <span className="text-sm font-semibold text-palengke-green shrink-0">
+                      {leaderboard[myRank].points} pts
+                    </span>
+                  </div>
+                )
+              )}
+            </>
           )}
         </div>
 
+        {/* Hall of Fame */}
         <div className="bg-white rounded-card shadow-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">
@@ -388,16 +381,7 @@ export default function ProfileScreen() {
             </div>
           </div>
 
-          <ul className="flex flex-col gap-1">
-            {hallOfFame.map((entry) => (
-              <li key={entry.label} className="flex items-center justify-between px-2.5 py-2">
-                <span className="text-ink-faint text-xs">{entry.label}</span>
-                <span className="text-sm font-medium text-ink">
-                  {entry.winner ? `👑 ${entry.winner.displayName}` : "No reports"}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <HallOfFameList entries={hallOfFame} />
         </div>
 
         <button

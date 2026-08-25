@@ -48,9 +48,6 @@ export default function ListScreen() {
         setMarkets(marketList);
         setLocation(savedLocation);
       } catch (err) {
-        // Without this catch, a failed query (e.g. a migration that hasn't
-        // been run yet) would leave `loading` stuck true forever with no
-        // feedback — just an endless skeleton and no way to know why.
         if (!cancelled) {
           setLoadError(
             "Couldn't load your list. If this is a fresh setup, make sure the shopping list migration has been run in Supabase."

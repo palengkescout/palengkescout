@@ -20,12 +20,6 @@ interface RowWithDistance {
   distanceKm: number | null;
 }
 
-/**
- * Ranks non-flagged rows by the same price+distance score used for the
- * whole-basket recommendation, and returns them sorted best-first along
- * with the id of the top pick (or null if there's nothing meaningful to
- * compare — fewer than 2 candidates, or no saved location).
- */
 function rankBySmartScore(
   candidates: RowWithDistance[],
   hasLocation: boolean
@@ -82,8 +76,6 @@ export default function ItemPricesScreen() {
     isItemInList(user.id, itemId).then(setInList);
   }, [user, itemId]);
 
-  // Same saved location used on Profile and the List page — read-only
-  // here, since editing it lives in one place (Profile) now.
   useEffect(() => {
     if (!user) {
       setLocation(null);
@@ -113,8 +105,6 @@ export default function ItemPricesScreen() {
     [rows, location]
   );
 
-  // Smart Pick is only ever chosen among non-flagged reports — an
-  // untrusted price shouldn't be able to win on being cheap or nearby.
   const nonFlagged = useMemo(
     () => rowsWithDistance.filter((r) => r.row.status !== "flagged"),
     [rowsWithDistance]
@@ -265,7 +255,7 @@ export default function ItemPricesScreen() {
                 {row.id === smartPickId && (
                   <span className="self-start inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-palengke-green rounded-pill px-2.5 py-1 ml-1">
                     <Sparkles size={11} strokeWidth={2.4} />
-                    Smart Pick — best price + distance
+                    Smart Pick. Look for the best price + distance
                   </span>
                 )}
                 <PriceRow row={row} />

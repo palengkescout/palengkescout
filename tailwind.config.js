@@ -4,14 +4,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Core brand — pulled straight from the PalengkeScout logo
         palengke: {
-          green: "#075C34", // pin / wordmark green — primary
+          green: "#075C34",
           "green-dark": "#054526",
           "green-light": "#0F6B3E",
-          red: "#C5211C", // awning / "Scout" red — secondary accent
+          red: "#C5211C", 
           "red-dark": "#A31A16",
-          gold: "#FEC502", // awning stripe — highlight / freshness / CTA glow
+          gold: "#FEC502", 
           "gold-dark": "#E0AC00",
         },
         cream: {
@@ -19,7 +18,7 @@ export default {
           soft: "#F3EDDD",
         },
         ink: {
-          DEFAULT: "#1B2A22", // near-black w/ a green undertone, for text
+          DEFAULT: "#1B2A22", 
           soft: "#4E5C53",
           faint: "#8A968D",
         },
@@ -43,6 +42,26 @@ export default {
       },
       spacing: {
         safe: "env(safe-area-inset-bottom)",
+      },
+      keyframes: {
+        "podium-rise": {
+          "0%": { opacity: "0", transform: "translateY(14px) scale(0.92)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "podium-glow": {
+          "0%, 100%": { opacity: "0.35" },
+          "50%": { opacity: "0.6" },
+        },
+        "crown-bounce": {
+          "0%": { transform: "translate(-50%, 4px)", opacity: "0" },
+          "60%": { transform: "translate(-50%, -2px)", opacity: "1" },
+          "100%": { transform: "translate(-50%, 0)", opacity: "1" },
+        },
+      },
+      animation: {
+        "podium-rise": "podium-rise 420ms cubic-bezier(0.16,1,0.3,1) both",
+        "podium-glow": "podium-glow 2.2s ease-in-out infinite",
+        "crown-bounce": "crown-bounce 500ms cubic-bezier(0.34,1.56,0.64,1) 260ms both",
       },
     },
   },

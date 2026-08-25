@@ -45,8 +45,6 @@ export default function ReportScreen() {
       setMarkets(marketList);
       setItemId((current) => current || (itemList.length ? itemList[0].id : ""));
     } catch {
-      // Previously this fetch had no .catch() at all — a failed request
-      // would leave the skeleton spinning forever with no explanation.
       setCatalogError("Couldn't load items and markets. Check your connection and try again.");
     } finally {
       setItemsLoading(false);
@@ -124,8 +122,6 @@ export default function ReportScreen() {
     handlePhotoSelect(null);
   }
 
-  // Still figuring out whether the person is logged in — show the form
-  // skeleton rather than briefly flashing the login gate for everyone.
   if (authLoading) {
     return (
       <div className="app-shell bg-cream">
@@ -147,7 +143,7 @@ export default function ReportScreen() {
           </div>
           <p className="font-display text-lg text-ink mb-1.5">Log in to report a price</p>
           <p className="text-ink-soft text-sm max-w-[30ch] mb-6">
-            Reporting prices earns you points and builds your contributor profile — log in or create an
+            Reporting prices earns you points and builds your contributor profile. Please log in or create an
             account to continue.
           </p>
           <button
@@ -221,14 +217,14 @@ export default function ReportScreen() {
             <p className="text-ink-soft text-sm max-w-[30ch] mb-4">
               Your report for {selectedItem?.name ?? "this item"} differs a lot from other prices at this
               market, so it's been <span className="font-medium text-ink">flagged for review</span>.
-              Thanks for reporting — we'll take a closer look.
+              Thanks for reporting, we'll take a closer look.
             </p>
           )}
 
           {result.multiplierApplied && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-3 py-1.5 mb-3">
               <Flame size={13} strokeWidth={2.4} />
-              1.5x bonus — you were in last week's Top 3!
+              1.5x Bonus! You were in last week's Top 3!
             </div>
           )}
 
@@ -362,7 +358,7 @@ export default function ReportScreen() {
             className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
           />
           <p className="text-ink-faint text-xs mt-2">
-            Adding your name builds your contributor reputation — coming in a later update.
+            Adding your name builds your contributor reputation - coming in a later update.
           </p>
         </div>
 

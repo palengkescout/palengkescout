@@ -10,8 +10,6 @@ import { marketTypeLabel } from "../lib/format";
 import { getMarketTypeIcon } from "../lib/marketIcons";
 import type { Market, MarketType } from "../types";
 
-// Order chosen for how common each type is in a typical Metro Manila
-// barangay, so the most likely pick sits at the top of the list.
 const MARKET_TYPES: MarketType[] = [
   "wet_market",
   "public_market",
@@ -36,10 +34,6 @@ const TYPE_OPTIONS: DropdownOption[] = MARKET_TYPES.map((type) => ({
   icon: getMarketTypeIcon(type),
 }));
 
-// Not linked from BottomNav or anywhere else in the app — reachable only by
-// typing this exact URL. Harmless even if someone stumbles onto it: the
-// screen itself checks is_admin below, and the database's RLS policies (see
-// migration 006) refuse any write from a non-admin account regardless.
 export default function AdminMarketsScreen() {
   const { user, loading: authLoading, openAuthModal } = useAuth();
   const [checkingAdmin, setCheckingAdmin] = useState(true);

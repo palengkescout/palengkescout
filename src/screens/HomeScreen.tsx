@@ -33,9 +33,6 @@ export default function HomeScreen() {
       setLowestPrices(lowest);
       setTopScoutIds(new Set(board.slice(0, 3).map((e) => e.userId)));
     } catch {
-      // Without this catch, a failed fetch (network blip, Supabase
-      // unreachable) would leave `loading` stuck true forever — an endless
-      // skeleton with no explanation and no way to recover.
       setLoadError("Couldn't load items right now. Check your connection and try again.");
     } finally {
       setLoading(false);
@@ -46,8 +43,6 @@ export default function HomeScreen() {
     loadHome();
   }, [loadHome]);
 
-  // Categories derived from whatever items are actually loaded — no extra
-  // fetch needed, and the list naturally stays in sync if items change.
   const categories = useMemo(() => {
     return Array.from(new Set(items.map((i) => i.category))).sort();
   }, [items]);

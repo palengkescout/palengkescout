@@ -4,7 +4,14 @@ import TopBar from "../components/TopBar";
 import ItemCard from "../components/ItemCard";
 import EmptyState from "../components/EmptyState";
 import HomeSkeleton from "../components/HomeSkeleton";
-import { listItems, listLowestPrices, type LowestPriceInfo } from "../lib/dataClient";
+import RecentReportsStrip from "../components/RecentReportsStrip";
+import {
+  listItems,
+  listLowestPrices,
+  listRecentReports,
+  type LowestPriceInfo,
+  type RecentReportInfo,
+} from "../lib/dataClient";
 import { getLeaderboard } from "../lib/leaderboard";
 import { useAuth } from "../lib/authContext";
 import type { Item } from "../types";
@@ -14,6 +21,7 @@ export default function HomeScreen() {
   const { user, openAuthModal } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [lowestPrices, setLowestPrices] = useState<Record<string, LowestPriceInfo | null>>({});
+  const [recentReports, setRecentReports] = useState<RecentReportInfo[]>([]);
   const [topScoutIds, setTopScoutIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -24,14 +32,16 @@ export default function HomeScreen() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [itemList, lowest, board] = await Promise.all([
+      const [itemList, lowest, board, recent] = await Promise.all([
         listItems(),
         listLowestPrices(),
         getLeaderboard("week"),
+        listRecentReports(15),
       ]);
       setItems(itemList);
       setLowestPrices(lowest);
       setTopScoutIds(new Set(board.slice(0, 3).map((e) => e.userId)));
+      setRecentReports(recent);
     } catch {
       setLoadError("Couldn't load items right now. Check your connection and try again.");
     } finally {
@@ -134,6 +144,8 @@ export default function HomeScreen() {
             ))}
           </div>
         )}
+
+        {!loading && !loadError && <RecentReportsStrip reports={recentReports} />}
 
         {loading ? (
           <HomeSkeleton />

@@ -4,7 +4,7 @@ import { recordPoints, getTotalPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } fro
 import { evaluateReportStatus } from "./verification";
 import { isEligibleForMultiplier } from "./leaderboard";
 import { enforceReportCooldown } from "./rateLimit";
-import type { Item, Market, MyReportRow, PriceReport, PriceRowData } from "../types";
+import type { Item, Market, MyReportRow, PriceReport, PriceRowData, PriceStatus } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
 
@@ -128,6 +128,69 @@ export async function listLowestPrices(): Promise<Record<string, LowestPriceInfo
     }
   }
   return result;
+}
+
+export interface RecentReportInfo {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemCategory: string;
+  itemUnit: string;
+  price: number;
+  reportedAt: string;
+  status: PriceStatus;
+}
+
+/**
+ * Most recent reports across all items, for the Home screen's "Recent
+ * reports" strip. Excludes flagged reports — same reasoning as
+ * listLowestPrices — since a flagged number shouldn't be shown as normal
+ * activity to browsing users.
+ */
+export async function listRecentReports(limit = 15): Promise<RecentReportInfo[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from("price_reports")
+      .select("id, item_id, price, status, reported_at, item:items(name, category, unit)")
+      .neq("status", "flagged")
+      .order("reported_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? [])
+      .filter((row: any) => row.item)
+      .map((row: any) => ({
+        id: row.id,
+        itemId: row.item_id,
+        itemName: row.item.name,
+        itemCategory: row.item.category,
+        itemUnit: row.item.unit,
+        price: Number(row.price),
+        reportedAt: row.reported_at,
+        status: row.status,
+      }));
+  }
+
+  const reports = loadMockReports()
+    .filter((r) => r.status !== "flagged")
+    .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())
+    .slice(0, limit);
+
+  return reports
+    .map((r) => {
+      const item = seedItems.find((i) => i.id === r.itemId);
+      if (!item) return null;
+      return {
+        id: r.id,
+        itemId: r.itemId,
+        itemName: item.name,
+        itemCategory: item.category,
+        itemUnit: item.unit,
+        price: r.price,
+        reportedAt: r.reportedAt,
+        status: r.status,
+      } satisfies RecentReportInfo;
+    })
+    .filter((r): r is RecentReportInfo => r !== null);
 }
 
 /**

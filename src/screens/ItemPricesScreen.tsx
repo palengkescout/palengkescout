@@ -255,7 +255,7 @@ export default function ItemPricesScreen() {
                 {row.id === smartPickId && (
                   <span className="self-start inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-palengke-green rounded-pill px-2.5 py-1 ml-1">
                     <Sparkles size={11} strokeWidth={2.4} />
-                    Smart Pick. Look for the best price + distance
+                    Recommended option
                   </span>
                 )}
                 <PriceRow row={row} />

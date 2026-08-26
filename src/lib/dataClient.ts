@@ -135,23 +135,26 @@ export interface RecentReportInfo {
   itemId: string;
   itemName: string;
   itemCategory: string;
-  itemUnit: string;
   price: number;
-  reportedAt: string;
   status: PriceStatus;
+  reportedAt: string;
 }
 
 /**
- * Most recent reports across all items, for the Home screen's "Recent
- * reports" strip. Excludes flagged reports — same reasoning as
- * listLowestPrices — since a flagged number shouldn't be shown as normal
- * activity to browsing users.
+ * The most recent N reports app-wide, newest first — feeds the Home
+ * screen's "recent activity" strip. Corrected to match
+ * RecentReportsStrip.tsx's actual shape (flat itemName/itemCategory
+ * fields, used for its emoji + label + link-to-item-detail row) — my
+ * first restore attempt guessed a nested item/market shape instead,
+ * which was wrong. Flagged reports are excluded, same reasoning as
+ * listLowestPrices: a likely-bad price shouldn't be surfaced as
+ * highlighted recent activity on the Home screen.
  */
-export async function listRecentReports(limit = 15): Promise<RecentReportInfo[]> {
+export async function listRecentReports(limit: number): Promise<RecentReportInfo[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
       .from("price_reports")
-      .select("id, item_id, price, status, reported_at, item:items(name, category, unit)")
+      .select("id, item_id, price, status, reported_at, item:items(name, category)")
       .neq("status", "flagged")
       .order("reported_at", { ascending: false })
       .limit(limit);
@@ -163,14 +166,13 @@ export async function listRecentReports(limit = 15): Promise<RecentReportInfo[]>
         itemId: row.item_id,
         itemName: row.item.name,
         itemCategory: row.item.category,
-        itemUnit: row.item.unit,
         price: Number(row.price),
-        reportedAt: row.reported_at,
         status: row.status,
+        reportedAt: row.reported_at,
       }));
   }
 
-  const reports = loadMockReports()
+  const reports = [...loadMockReports()]
     .filter((r) => r.status !== "flagged")
     .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())
     .slice(0, limit);
@@ -184,11 +186,10 @@ export async function listRecentReports(limit = 15): Promise<RecentReportInfo[]>
         itemId: r.itemId,
         itemName: item.name,
         itemCategory: item.category,
-        itemUnit: item.unit,
         price: r.price,
-        reportedAt: r.reportedAt,
         status: r.status,
-      } satisfies RecentReportInfo;
+        reportedAt: r.reportedAt,
+      };
     })
     .filter((r): r is RecentReportInfo => r !== null);
 }
@@ -257,6 +258,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   const multiplierApplied = input.userId ? await isEligibleForMultiplier(input.userId) : false;
   const pointsAwarded = multiplierApplied ? Math.round(baseline * 1.5) : baseline;
   const reason = input.photoFile ? "report_with_photo" : "report";
+  const now = new Date().toISOString();
 
   if (isSupabaseConfigured && supabase) {
     if (input.userId) {
@@ -275,16 +277,24 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
 
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
-      .select("id, price, status")
+      .select("id, price, status, user_id, reported_at")
       .eq("item_id", input.itemId)
       .eq("market_id", input.marketId)
       .order("reported_at", { ascending: false })
-      .limit(50);
+      .limit(200);
     if (existingError) throw existingError;
+
+    // A reporter's own other reports can never count as corroboration for
+    // each other — otherwise submitting two reports yourself at a similar
+    // price would "verify" both, with no independent confirmation at all.
+    const othersOnly = input.userId
+      ? (existing ?? []).filter((r) => r.user_id !== input.userId)
+      : existing ?? [];
 
     const evaluation = evaluateReportStatus(
       input.price,
-      (existing ?? []).map((r) => ({ id: r.id, price: Number(r.price), status: r.status }))
+      now,
+      othersOnly.map((r) => ({ id: r.id, price: Number(r.price), status: r.status, reportedAt: r.reported_at }))
     );
 
     const photoUrl = input.photoFile ? await uploadPhotoToSupabase(input.photoFile) : undefined;
@@ -339,10 +349,14 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     enforceReportCooldown(ownReports[0]?.reportedAt ?? null);
   }
 
+  // Same self-corroboration exclusion as the Supabase branch above.
   const sameItemMarketReports = reports.filter(
-    (r) => r.itemId === input.itemId && r.marketId === input.marketId
+    (r) =>
+      r.itemId === input.itemId &&
+      r.marketId === input.marketId &&
+      (!input.userId || r.userId !== input.userId)
   );
-  const evaluation = evaluateReportStatus(input.price, sameItemMarketReports);
+  const evaluation = evaluateReportStatus(input.price, now, sameItemMarketReports);
 
   const photoUrl = input.photoFile ? await fileToDataUrl(input.photoFile) : undefined;
   const newReport: PriceReport = {
@@ -351,7 +365,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     marketId: input.marketId,
     price: input.price,
     status: evaluation.status,
-    reportedAt: new Date().toISOString(),
+    reportedAt: now,
     reporterName: input.reporterName || "Anonymous",
     photoUrl,
     pointsAwarded,
@@ -415,12 +429,17 @@ export interface UpdateReportResult {
 }
 
 /**
- * Edits a report's price and re-runs the same verification logic used for
- * new reports — the edited price can move to verified, pending, or
- * flagged depending on how it now compares to other reports at that
- * market. The report being edited is excluded from its own comparison set.
+ * Edits a report's price and re-runs the same daily verification logic
+ * used for new reports. The report is also re-attributed to right now
+ * (reported_at is bumped) — editing a price is, in effect, re-reporting
+ * it today, and today's calendar day is what the whole daily-reset rule
+ * keys off of. Both the report being edited AND this user's other reports
+ * at this market are excluded from the comparison set (self-corroboration
+ * guard, same as reportPrice()).
  */
 export async function updateMyReport(input: UpdateReportInput): Promise<UpdateReportResult> {
+  const now = new Date().toISOString();
+
   if (isSupabaseConfigured && supabase) {
     const { data: current, error: currentError } = await supabase
       .from("price_reports")
@@ -432,22 +451,27 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
 
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
-      .select("id, price, status")
+      .select("id, price, status, user_id, reported_at")
       .eq("item_id", current.item_id)
       .eq("market_id", current.market_id)
       .neq("id", input.reportId)
       .order("reported_at", { ascending: false })
-      .limit(50);
+      .limit(200);
     if (existingError) throw existingError;
+
+    // Exclude this reporter's own other reports at this market — same
+    // self-corroboration guard as reportPrice() above.
+    const othersOnly = (existing ?? []).filter((r) => r.user_id !== input.userId);
 
     const evaluation = evaluateReportStatus(
       input.newPrice,
-      (existing ?? []).map((r) => ({ id: r.id, price: Number(r.price), status: r.status }))
+      now,
+      othersOnly.map((r) => ({ id: r.id, price: Number(r.price), status: r.status, reportedAt: r.reported_at }))
     );
 
     const { data, error } = await supabase
       .from("price_reports")
-      .update({ price: input.newPrice, status: evaluation.status })
+      .update({ price: input.newPrice, status: evaluation.status, reported_at: now })
       .eq("id", input.reportId)
       .eq("user_id", input.userId)
       .select()
@@ -477,12 +501,16 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
   if (!target) throw new Error("Report not found.");
 
   const others = reports.filter(
-    (r) => r.id !== input.reportId && r.itemId === target.itemId && r.marketId === target.marketId
+    (r) =>
+      r.id !== input.reportId &&
+      r.itemId === target.itemId &&
+      r.marketId === target.marketId &&
+      r.userId !== input.userId
   );
-  const evaluation = evaluateReportStatus(input.newPrice, others);
+  const evaluation = evaluateReportStatus(input.newPrice, now, others);
 
   const updated = reports.map((r) => {
-    if (r.id === input.reportId) return { ...r, price: input.newPrice, status: evaluation.status };
+    if (r.id === input.reportId) return { ...r, price: input.newPrice, status: evaluation.status, reportedAt: now };
     if (evaluation.upgradeReportIds.includes(r.id)) return { ...r, status: "verified" as const };
     return r;
   });
@@ -503,18 +531,9 @@ export interface DeleteReportResult {
  * keeps its points permanently, even after deletion, per product rule.
  *
  * The clawback is recorded as a new, independent negative point_events
- * entry rather than deleting the original one. That keeps a clean audit
- * trail (an unexplained missing point_events row is much harder to
- * reason about later than a visible "-15" entry), and sidesteps any
- * foreign-key/cascade complications from the report row being deleted
- * out from under it — the compensating entry isn't linked to a
- * price_report_id at all.
- *
- * Reuses the existing "report" reason literal rather than introducing a
- * new "report_deleted" value, since point_events.reason may have a
- * database CHECK constraint restricting it to known values — worth
- * confirming if you want clawback entries to read distinctly in a future
- * points-history view.
+ * entry rather than deleting the original one, preserving an audit trail
+ * and sidestepping any foreign-key/cascade complications from the report
+ * row being deleted out from under it.
  */
 export async function deleteMyReport(reportId: string, userId: string): Promise<DeleteReportResult> {
   if (isSupabaseConfigured && supabase) {

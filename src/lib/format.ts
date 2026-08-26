@@ -1,10 +1,10 @@
 export type FreshnessTier = "fresh" | "aging" | "stale";
 
 export function getFreshnessTier(reportedAt: string): FreshnessTier {
-  const minutes = (Date.now() - new Date(reportedAt).getTime()) / 60_000;
-  if (minutes < 60) return "fresh"; // 🟢 under 1 hour
-  if (minutes < 24 * 60) return "aging"; // 🟡 under 24 hours
-  return "stale"; // 🔴 older
+  const hours = (Date.now() - new Date(reportedAt).getTime()) / (60 * 60 * 1000);
+  if (hours < 12) return "fresh"; // 🟢 before 12 hours
+  if (hours < 24) return "aging"; // 🟡 past 12 hours, under a day
+  return "stale"; // 🔴 a day or more
 }
 
 export function formatRelativeTime(reportedAt: string): string {

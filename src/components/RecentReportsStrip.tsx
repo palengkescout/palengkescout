@@ -1,18 +1,13 @@
 import { Link } from "react-router-dom";
 import type { RecentReportInfo } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
-import { formatPeso } from "../lib/format";
+import { formatPeso, formatRelativeTime, getFreshnessTier } from "../lib/format";
 
-function timeAgo(isoString: string): string {
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+const TIMESTAMP_COLOR: Record<ReturnType<typeof getFreshnessTier>, string> = {
+  fresh: "text-fresh-green",
+  aging: "text-fresh-amber",
+  stale: "text-fresh-red",
+};
 
 interface RecentReportsStripProps {
   reports: RecentReportInfo[];
@@ -38,7 +33,9 @@ export default function RecentReportsStrip({ reports }: RecentReportsStripProps)
               <span className="text-xs font-semibold text-ink truncate">{r.itemName}</span>
             </div>
             <p className="font-display text-palengke-green text-sm">{formatPeso(r.price)}</p>
-            <p className="text-ink-faint text-[10px]">{timeAgo(r.reportedAt)}</p>
+            <p className={`text-[10px] font-medium ${TIMESTAMP_COLOR[getFreshnessTier(r.reportedAt)]}`}>
+              {formatRelativeTime(r.reportedAt)}
+            </p>
           </Link>
         ))}
       </div>

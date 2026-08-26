@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CirclePlus, Award, ListPlus, Check, MapPin, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  CirclePlus,
+  Award,
+  ListPlus,
+  Check,
+  MapPin,
+  Sparkles,
+  Navigation,
+} from "lucide-react";
 import PriceRow from "../components/PriceRow";
 import PriceHistoryChart from "../components/PriceHistoryChart";
 import EmptyState from "../components/EmptyState";
+import RouteMap from "../components/RouteMap";
 import { getItem, listPricesForItem } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_REPORT } from "../lib/points";
@@ -53,6 +63,7 @@ export default function ItemPricesScreen() {
   const [inList, setInList] = useState(false);
   const [addingToList, setAddingToList] = useState(false);
   const [location, setLocation] = useState<SavedLocation | null>(null);
+  const [showRoute, setShowRoute] = useState(false);
 
   useEffect(() => {
     if (!itemId) return;
@@ -94,6 +105,13 @@ export default function ItemPricesScreen() {
     };
   }, [user]);
 
+  // Route toggle resets whenever the underlying item/sort/location context
+  // changes, so a stale route panel never lingers open for a different
+  // Smart Pick market than the one it was originally opened for.
+  useEffect(() => {
+    setShowRoute(false);
+  }, [itemId, sort, location]);
+
   const rowsWithDistance = useMemo<RowWithDistance[]>(
     () =>
       rows.map((row) => ({
@@ -117,8 +135,6 @@ export default function ItemPricesScreen() {
 
   const sortedRows = useMemo<RowWithDistance[]>(() => {
     if (sort === "smart") {
-      // Non-flagged first (already ranked best-first), flagged pushed to
-      // the bottom regardless of their own price.
       return [...smartRankedNonFlagged, ...[...flagged].sort((a, b) => a.row.price - b.row.price)];
     }
     if (sort === "recent") {
@@ -209,9 +225,6 @@ export default function ItemPricesScreen() {
 
         {!loading && rows.length > 0 && (
           <div className="mb-4">
-            {/* Segmented control, not separate floating buttons — one
-                compact pill with the active option highlighted inside it,
-                matching the native iOS pattern for a 2–3 way toggle. */}
             <div className="flex bg-cream-soft rounded-pill p-1">
               {sortOptions.map(({ mode, label }) => (
                 <button
@@ -253,20 +266,45 @@ export default function ItemPricesScreen() {
           />
         ) : (
           <div className="flex flex-col gap-4">
-            {sortedRows.map(({ row, distanceKm }) => (
-              <div key={row.id} className="flex flex-col gap-1.5">
-                {row.id === smartPickId && (
-                  <span className="self-start inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-palengke-green rounded-pill px-2.5 py-1 ml-1">
-                    <Sparkles size={11} strokeWidth={2.4} />
-                    Recommended option
-                  </span>
-                )}
-                <PriceRow row={row} />
-                {distanceKm !== null && (
-                  <p className="text-ink-faint text-[11px] pl-3.5">{distanceKm.toFixed(1)} km from you</p>
-                )}
-              </div>
-            ))}
+            {sortedRows.map(({ row, distanceKm }) => {
+              const isSmartPick = row.id === smartPickId;
+              return (
+                <div key={row.id} className="flex flex-col gap-1.5">
+                  {isSmartPick && (
+                    <div className="flex items-center justify-between gap-2 ml-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-palengke-green rounded-pill px-2.5 py-1">
+                        <Sparkles size={11} strokeWidth={2.4} />
+                        Recommended option
+                      </span>
+                      {location && (
+                        <button
+                          onClick={() => setShowRoute((v) => !v)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-palengke-green"
+                        >
+                          <Navigation size={12} strokeWidth={2.4} />
+                          {showRoute ? "Hide route" : "Show route"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <PriceRow row={row} />
+                  {distanceKm !== null && (
+                    <p className="text-ink-faint text-[11px] pl-3.5">{distanceKm.toFixed(1)} km from you</p>
+                  )}
+                  {isSmartPick && showRoute && location && (
+                    <div className="mt-1">
+                      <RouteMap
+                        fromLat={location.lat}
+                        fromLng={location.lng}
+                        toLat={row.market.latitude}
+                        toLng={row.market.longitude}
+                        marketName={row.market.name}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

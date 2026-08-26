@@ -13,6 +13,8 @@ interface ItemCardProps {
 
 export default function ItemCard({ item, lowestPrice, isTopScout }: ItemCardProps) {
   const emoji = getItemEmoji(item.name, item.category);
+  const hasPrice = lowestPrice !== null;
+
   return (
     <Link
       to={`/item/${item.id}`}
@@ -34,9 +36,11 @@ export default function ItemCard({ item, lowestPrice, isTopScout }: ItemCardProp
         <p className="text-ink-faint text-xs">per {item.unit}</p>
       </div>
       <div className="flex items-center justify-between mt-auto gap-1">
-        <p className="font-display text-palengke-green text-base">
-          {lowestPrice !== null ? `from ${formatPeso(lowestPrice)}` : "No reports yet"}
-        </p>
+        {hasPrice ? (
+          <p className="font-display text-palengke-green text-base">{`from ${formatPeso(lowestPrice)}`}</p>
+        ) : (
+          <p className="text-ink-faint text-xs font-medium">No reports yet</p>
+        )}
         <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-palengke-gold-dark bg-palengke-gold/15 rounded-pill px-1.5 py-0.5 shrink-0">
           <Award size={10} strokeWidth={2.6} />+{POINTS_FOR_REPORT}
         </span>

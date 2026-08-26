@@ -51,8 +51,6 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Location — pin coordinates + barangay label, loaded from the saved
-  // profile and only written back to Supabase when the person taps Save.
   const [barangay, setBarangay] = useState("");
   const [savedBarangay, setSavedBarangay] = useState("");
   const [savedLat, setSavedLat] = useState<number | null>(null);
@@ -92,8 +90,6 @@ export default function ProfileScreen() {
       setPendingLng(row?.location_lng ?? null);
       setMultiplierEligible(eligible);
     } catch {
-      // Previously this had no .catch() — a failed request left `loading`
-      // stuck true forever, an endless skeleton with no explanation.
       setLoadError("Couldn't load your profile right now. Check your connection and try again.");
     } finally {
       setLoading(false);
@@ -199,18 +195,31 @@ export default function ProfileScreen() {
 
   const myRank = leaderboard.findIndex((e) => e.userId === user?.id);
 
+  const tierProgressPct = stats?.nextTier
+    ? Math.min(100, Math.round((stats.verifiedCount / (stats.verifiedCount + stats.nextTier.verifiedNeeded)) * 100))
+    : 100;
+
   return (
     <div className="app-shell bg-cream">
       <TopBar title="Profile" subtitle="Your contributions to PalengkeScout" />
 
       <div className="app-content px-5 pt-4 pb-8 flex flex-col gap-5">
         <div className="bg-white rounded-card shadow-card p-4">
-          <p className="font-display text-lg text-ink mb-0.5">{displayName}</p>
-          <p className="text-ink-faint text-xs mb-3">{user?.email}</p>
-
-          <div className="flex items-center gap-2 bg-palengke-gold/15 text-palengke-gold-dark rounded-pill px-4 py-2 w-fit mb-3">
-            <Award size={18} strokeWidth={2} />
-            <span className="text-sm font-semibold">{points} points total</span>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <Avatar name={displayName} size={48} />
+              <div className="min-w-0">
+                <p className="font-display text-base text-ink leading-tight truncate">{displayName}</p>
+                <p className="text-ink-faint text-xs truncate">{user?.email}</p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="flex items-center justify-end gap-1">
+                <Award size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
+                <p className="font-display text-2xl text-palengke-green leading-none">{points}</p>
+              </div>
+              <p className="text-ink-faint text-[11px] font-medium mt-1">points</p>
+            </div>
           </div>
 
           {multiplierEligible && (
@@ -221,15 +230,27 @@ export default function ProfileScreen() {
           )}
 
           {stats && (
-            <div className="mt-1">
-              <p className="text-sm font-semibold text-ink mb-1">{tierLabel(stats.tier)}</p>
-              <p className="text-ink-faint text-xs">
-                {stats.nextTier
-                  ? `${stats.nextTier.verifiedNeeded} more verified report${
-                      stats.nextTier.verifiedNeeded === 1 ? "" : "s"
-                    } to reach ${tierLabel(stats.nextTier.tier)}`
-                  : "You've reached the highest tier — thank you for keeping prices honest."}
-              </p>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-sm font-semibold text-ink">{tierLabel(stats.tier)}</p>
+                {stats.nextTier && (
+                  <p className="text-ink-faint text-[11px]">
+                    {stats.nextTier.verifiedNeeded} more to {tierLabel(stats.nextTier.tier)}
+                  </p>
+                )}
+              </div>
+              {stats.nextTier ? (
+                <div className="h-1.5 rounded-full bg-cream-soft overflow-hidden">
+                  <div
+                    className="h-full bg-palengke-green rounded-full transition-all duration-300"
+                    style={{ width: `${tierProgressPct}%` }}
+                  />
+                </div>
+              ) : (
+                <p className="text-ink-faint text-xs">
+                  You've reached the highest tier — thank you for keeping prices honest.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -267,7 +288,6 @@ export default function ProfileScreen() {
           <ChevronRight size={16} className="text-ink-faint shrink-0" strokeWidth={2.4} />
         </button>
 
-        {/* Your Location */}
         <div className="bg-white rounded-card shadow-card p-4">
           <div className="flex items-center gap-1.5 mb-1">
             <MapPin size={16} className="text-palengke-green" strokeWidth={2.2} />
@@ -324,7 +344,6 @@ export default function ProfileScreen() {
           </button>
         </div>
 
-        {/* Leaderboard — podium for top 3, ranked list for 4–10 */}
         <div className="bg-white rounded-card shadow-card p-4">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-1.5">
@@ -379,7 +398,6 @@ export default function ProfileScreen() {
           )}
         </div>
 
-        {/* Hall of Fame */}
         <div className="bg-white rounded-card shadow-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">

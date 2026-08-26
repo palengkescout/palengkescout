@@ -193,11 +193,11 @@ export default function ItemPricesScreen() {
               onClick={handleAddToList}
               disabled={addingToList}
               aria-label={inList ? "Already in your list" : "Add to my list"}
-              className={`shrink-0 flex items-center gap-1.5 rounded-pill px-3 py-2 text-xs font-semibold min-h-[36px] ${
+              className={`shrink-0 flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold min-h-[32px] ${
                 inList ? "bg-white/20 text-white" : "bg-white text-palengke-green"
               }`}
             >
-              {inList ? <Check size={14} strokeWidth={2.4} /> : <ListPlus size={14} strokeWidth={2.4} />}
+              {inList ? <Check size={13} strokeWidth={2.4} /> : <ListPlus size={13} strokeWidth={2.4} />}
               {inList ? "In list" : "Add to list"}
             </button>
           )}
@@ -208,14 +208,17 @@ export default function ItemPricesScreen() {
         {!loading && rows.length > 0 && <PriceHistoryChart rows={rows} />}
 
         {!loading && rows.length > 0 && (
-          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-            <div className="flex gap-2">
+          <div className="mb-4">
+            {/* Segmented control, not separate floating buttons — one
+                compact pill with the active option highlighted inside it,
+                matching the native iOS pattern for a 2–3 way toggle. */}
+            <div className="flex bg-cream-soft rounded-pill p-1">
               {sortOptions.map(({ mode, label }) => (
                 <button
                   key={mode}
                   onClick={() => setSort(mode)}
-                  className={`px-3.5 py-2 rounded-pill text-sm font-medium min-h-[36px] ${
-                    sort === mode ? "bg-palengke-green text-white" : "bg-white text-ink-soft shadow-card"
+                  className={`flex-1 py-2 rounded-pill text-[13px] font-semibold transition-colors min-h-[36px] ${
+                    sort === mode ? "bg-white text-ink shadow-sm" : "text-ink-faint"
                   }`}
                 >
                   {label}
@@ -226,7 +229,7 @@ export default function ItemPricesScreen() {
             {!location && (
               <button
                 onClick={() => navigate("/profile")}
-                className="flex items-center gap-1.5 text-xs font-medium text-palengke-green"
+                className="flex items-center gap-1.5 text-xs font-medium text-palengke-green mt-2.5"
               >
                 <MapPin size={13} strokeWidth={2.2} />
                 Set location for distance

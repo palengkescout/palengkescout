@@ -22,10 +22,10 @@ function median(values: number[]): number {
 
 export interface ReportForEvaluation {
   id: string;
-  price: number;
   status: PriceStatus;
   reportedAt: string;
-  unit: string; // NEW — only reports priced in the SAME unit may corroborate or flag one another
+  normalizedUnit: string; 
+  normalizedPrice: number; 
 }
 
 export interface StatusEvaluation {
@@ -34,37 +34,29 @@ export interface StatusEvaluation {
 }
 
 export function evaluateReportStatus(
-  newPrice: number,
+  newNormalizedPrice: number,
   newReportedAt: string,
-  newUnit: string, // NEW — the unit of the report being evaluated
+  newNormalizedUnit: string,
   existingReportsSameMarket: ReportForEvaluation[]
 ): StatusEvaluation {
   const today = manilaDateKey(newReportedAt);
 
-  // Restrict comparison to reports in the same unit first. Without this,
-  // a ₱50/piece report and a ₱50/kg report could wrongly confirm or flag
-  // each other even though they're not describing the same price at all.
-  const sameUnit = existingReportsSameMarket.filter((r) => r.unit === newUnit);
+  const sameUnit = existingReportsSameMarket.filter((r) => r.normalizedUnit === newNormalizedUnit);
 
   const matchingToday = sameUnit.filter(
-    (r) => samePrice(r.price, newPrice) && manilaDateKey(r.reportedAt) === today
+    (r) => samePrice(r.normalizedPrice, newNormalizedPrice) && manilaDateKey(r.reportedAt) === today
   );
 
-  // +1 counts the report being evaluated itself.
   if (matchingToday.length + 1 >= CONFIRMATIONS_NEEDED) {
     return { status: "verified", upgradeReportIds: matchingToday.map((r) => r.id) };
   }
 
-  // Not enough confirmations yet for this exact price today. Before
-  // leaving it as pending, check it against whatever price *did* reach
-  // consensus today for the same unit, if any — a huge divergence from an
-  // already-confirmed price gets flagged rather than silently ignored.
   const verifiedToday = sameUnit.filter(
     (r) => r.status === "verified" && manilaDateKey(r.reportedAt) === today
   );
   if (verifiedToday.length > 0) {
-    const referencePrice = median(verifiedToday.map((r) => r.price));
-    const diffPct = Math.abs(newPrice - referencePrice) / referencePrice;
+    const referencePrice = median(verifiedToday.map((r) => r.normalizedPrice));
+    const diffPct = Math.abs(newNormalizedPrice - referencePrice) / referencePrice;
     if (diffPct > PRICE_FLAG_PCT) {
       return { status: "flagged", upgradeReportIds: [] };
     }

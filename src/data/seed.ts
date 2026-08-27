@@ -176,33 +176,33 @@ const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString(
 
 export const seedPriceReports: PriceReport[] = [
   // Tomato
-  { id: "pr-1", itemId: "itm-1", marketId: "mkt-1", price: 90, status: "verified", reportedAt: minutesAgo(12), reporterName: "Mira C.", productName: "Tomato (Local)", unit: "kg" },
-  { id: "pr-2", itemId: "itm-1", marketId: "mkt-3", price: 82, status: "verified", reportedAt: minutesAgo(25), reporterName: "Jun D.", productName: "Tomato (Local)", unit: "kg" },
-  { id: "pr-3", itemId: "itm-1", marketId: "mkt-2", price: 105, status: "verified", reportedAt: minutesAgo(240), reporterName: "Ate Baby", productName: "Tomato (Local)", unit: "kg" },
-  { id: "pr-4", itemId: "itm-1", marketId: "mkt-1", price: 250, status: "flagged", reportedAt: minutesAgo(5), reporterName: "Anonymous", productName: "Tomato (Local)", unit: "kg" },
+  { id: "pr-1", itemId: "itm-1", marketId: "mkt-1", price: 90, status: "verified", reportedAt: minutesAgo(12), reporterName: "Mira C.", productName: "Tomato (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 90 },
+  { id: "pr-2", itemId: "itm-1", marketId: "mkt-3", price: 82, status: "verified", reportedAt: minutesAgo(25), reporterName: "Jun D.", productName: "Tomato (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 82 },
+  { id: "pr-3", itemId: "itm-1", marketId: "mkt-2", price: 105, status: "verified", reportedAt: minutesAgo(240), reporterName: "Ate Baby", productName: "Tomato (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 105 },
+  { id: "pr-4", itemId: "itm-1", marketId: "mkt-1", price: 250, status: "flagged", reportedAt: minutesAgo(5), reporterName: "Anonymous", productName: "Tomato (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 250 },
 
   // Red Onion
-  { id: "pr-5", itemId: "itm-2", marketId: "mkt-1", price: 120, status: "verified", reportedAt: minutesAgo(40), reporterName: "Mira C.", productName: "Red Onion (Local)", unit: "kg" },
-  { id: "pr-6", itemId: "itm-2", marketId: "mkt-3", price: 140, status: "verified", reportedAt: minutesAgo(90), reporterName: "Jun D.", productName: "Red Onion (Local)", unit: "kg" },
+  { id: "pr-5", itemId: "itm-2", marketId: "mkt-1", price: 120, status: "verified", reportedAt: minutesAgo(40), reporterName: "Mira C.", productName: "Red Onion (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 120 },
+  { id: "pr-6", itemId: "itm-2", marketId: "mkt-3", price: 140, status: "verified", reportedAt: minutesAgo(90), reporterName: "Jun D.", productName: "Red Onion (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 140 },
 
   // Garlic
-  { id: "pr-7", itemId: "itm-3", marketId: "mkt-1", price: 210, status: "verified", reportedAt: minutesAgo(60), reporterName: "Mira C.", productName: "Garlic (Local)", unit: "kg" },
-  { id: "pr-8", itemId: "itm-3", marketId: "mkt-2", price: 230, status: "pending", reportedAt: minutesAgo(3), reporterName: "Kap Rene", productName: "Garlic (Imported)", unit: "kg" },
+  { id: "pr-7", itemId: "itm-3", marketId: "mkt-1", price: 210, status: "verified", reportedAt: minutesAgo(60), reporterName: "Mira C.", productName: "Garlic (Local)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 210 },
+  { id: "pr-8", itemId: "itm-3", marketId: "mkt-2", price: 230, status: "pending", reportedAt: minutesAgo(3), reporterName: "Kap Rene", productName: "Garlic (Imported)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 230 },
 
   // Whole Chicken
-  { id: "pr-9", itemId: "itm-4", marketId: "mkt-1", price: 210, status: "verified", reportedAt: minutesAgo(18), reporterName: "Mira C.", productName: "Whole Chicken (Native)", unit: "kg" },
-  { id: "pr-10", itemId: "itm-4", marketId: "mkt-3", price: 220, status: "verified", reportedAt: minutesAgo(300), reporterName: "Jun D.", productName: "Whole Chicken (Native)", unit: "kg" },
+  { id: "pr-9", itemId: "itm-4", marketId: "mkt-1", price: 210, status: "verified", reportedAt: minutesAgo(18), reporterName: "Mira C.", productName: "Whole Chicken (Native)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 210 },
+  { id: "pr-10", itemId: "itm-4", marketId: "mkt-3", price: 220, status: "verified", reportedAt: minutesAgo(300), reporterName: "Jun D.", productName: "Whole Chicken (Native)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 220 },
 
   // Pork Belly
-  { id: "pr-11", itemId: "itm-5", marketId: "mkt-1", price: 380, status: "verified", reportedAt: minutesAgo(20), reporterName: "Mira C.", productName: "Pork Belly (Liempo)", unit: "kg" },
+  { id: "pr-11", itemId: "itm-5", marketId: "mkt-1", price: 380, status: "verified", reportedAt: minutesAgo(20), reporterName: "Mira C.", productName: "Pork Belly (Liempo)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 380 },
 
   // Galunggong
-  { id: "pr-12", itemId: "itm-6", marketId: "mkt-1", price: 220, status: "verified", reportedAt: minutesAgo(15), reporterName: "Mira C.", productName: "Galunggong (Fresh)", unit: "kg" },
-  { id: "pr-13", itemId: "itm-6", marketId: "mkt-2", price: 240, status: "pending", reportedAt: minutesAgo(2), reporterName: "Anonymous", productName: "Galunggong (Fresh)", unit: "kg" },
+  { id: "pr-12", itemId: "itm-6", marketId: "mkt-1", price: 220, status: "verified", reportedAt: minutesAgo(15), reporterName: "Mira C.", productName: "Galunggong (Fresh)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 220 },
+  { id: "pr-13", itemId: "itm-6", marketId: "mkt-2", price: 240, status: "pending", reportedAt: minutesAgo(2), reporterName: "Anonymous", productName: "Galunggong (Fresh)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 240 },
 
   // Rice
-  { id: "pr-14", itemId: "itm-7", marketId: "mkt-3", price: 52, status: "verified", reportedAt: minutesAgo(500), reporterName: "Jun D.", productName: "Well-Milled Rice", unit: "kg" },
+  { id: "pr-14", itemId: "itm-7", marketId: "mkt-3", price: 52, status: "verified", reportedAt: minutesAgo(500), reporterName: "Jun D.", productName: "Well-Milled Rice", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 52 },
 
   // Banana
-  { id: "pr-15", itemId: "itm-8", marketId: "mkt-1", price: 65, status: "verified", reportedAt: minutesAgo(35), reporterName: "Mira C.", productName: "Banana (Lakatan)", unit: "kg" },
+  { id: "pr-15", itemId: "itm-8", marketId: "mkt-1", price: 65, status: "verified", reportedAt: minutesAgo(35), reporterName: "Mira C.", productName: "Banana (Lakatan)", unit: "kg", quantity: 1, normalizedUnit: "kg", normalizedPrice: 65 },
 ];

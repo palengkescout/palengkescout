@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
 import { recordPoints, getTotalPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
 import { evaluateReportStatus } from "./verification";
+import { normalizeQuantity } from "./units";
 import { isEligibleForMultiplier } from "./leaderboard";
 import { enforceReportCooldown } from "./rateLimit";
 import type { Item, Market, MyReportRow, PriceReport, PriceRowData, PriceStatus } from "../types";
@@ -59,6 +60,9 @@ function mapSupabaseRow(row: any): PriceRowData {
     userId: row.user_id ?? undefined,
     productName: row.product_name,
     unit: row.unit,
+    quantity: Number(row.quantity),
+    normalizedUnit: row.normalized_unit,
+    normalizedPrice: Number(row.normalized_price),
     market: {
       id: row.market.id,
       name: row.market.name,
@@ -98,18 +102,6 @@ export interface LowestPriceInfo {
   reporterId: string | null;
 }
 
-/**
- * Lowest currently-visible price per item, plus who reported it — the
- * reporter id is used to show a "Top Scout" badge on the Home screen card
- * when that reporter is currently in this week's top 3.
- *
- * NOTE: this is intentionally still keyed by item only, not item+unit.
- * "Lowest price" as a raw number is only meaningful for comparison when
- * units match; if you start seeing mixed-unit reports pull this number
- * in a misleading direction (e.g. a "Pack" price undercutting the usual
- * "Kg" price), group by item+unit here the same way listing/sorting logic
- * elsewhere should.
- */
 export async function listLowestPrices(): Promise<Record<string, LowestPriceInfo | null>> {
   const result: Record<string, LowestPriceInfo | null> = {};
 
@@ -149,16 +141,6 @@ export interface RecentReportInfo {
   reportedAt: string;
 }
 
-/**
- * The most recent N reports app-wide, newest first — feeds the Home
- * screen's "recent activity" strip. Corrected to match
- * RecentReportsStrip.tsx's actual shape (flat itemName/itemCategory
- * fields, used for its emoji + label + link-to-item-detail row) — my
- * first restore attempt guessed a nested item/market shape instead,
- * which was wrong. Flagged reports are excluded, same reasoning as
- * listLowestPrices: a likely-bad price shouldn't be surfaced as
- * highlighted recent activity on the Home screen.
- */
 export async function listRecentReports(limit: number): Promise<RecentReportInfo[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
@@ -203,21 +185,6 @@ export async function listRecentReports(limit: number): Promise<RecentReportInfo
     .filter((r): r is RecentReportInfo => r !== null);
 }
 
-/**
- * Upgrades other pending reports to "verified" once a new/edited report
- * anchors a large-enough consensus cluster (see verification.ts).
- *
- * This is a cross-user UPDATE — it touches rows that don't belong to the
- * caller — and price_reports has no RLS policy permitting that (by
- * design; see migration 007's comments on why a broader policy would be
- * unsafe). Until that's replaced with a proper SECURITY DEFINER function
- * that re-derives the upgrade set server-side, this call is expected to
- * fail under RLS. It's wrapped here so that expected failure can never
- * take down the report the person actually just submitted or edited —
- * previously it did exactly that, because the un-caught error propagated
- * up and rejected the whole reportPrice()/updateMyReport() call even
- * though the primary row had already saved successfully.
- */
 async function tryUpgradeMatchingReports(ids: string[]): Promise<void> {
   if (ids.length === 0 || !supabase) return;
   try {
@@ -231,12 +198,13 @@ async function tryUpgradeMatchingReports(ids: string[]): Promise<void> {
 export interface ReportPriceInput {
   itemId: string;
   marketId: string;
-  price: number;
+  price: number; // total price for `quantity` of `unit` — e.g. ₱45 for 500g
   reporterName: string;
   photoFile?: File;
   userId?: string;
-  productName: string; // NEW — required, the specific brand/variant being priced
-  unit: string; // NEW — required, the measurement for this specific report
+  productName: string; // required — the specific brand/variant being priced
+  unit: string; // required — the measurement this report was entered in
+  quantity: number; // required — how much of `unit` the price covers, e.g. 500 for "500 g"
 }
 
 export interface ReportPriceResult {
@@ -271,6 +239,8 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
   const reason = input.photoFile ? "report_with_photo" : "report";
   const now = new Date().toISOString();
 
+  const { normalizedUnit, normalizedPrice } = normalizeQuantity(input.price, input.quantity, input.unit);
+
   if (isSupabaseConfigured && supabase) {
     if (input.userId) {
       const { data: lastOwn, error: lastOwnError } = await supabase
@@ -288,30 +258,27 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
 
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
-      .select("id, price, status, user_id, reported_at, unit")
+      .select("id, status, user_id, reported_at, normalized_unit, normalized_price")
       .eq("item_id", input.itemId)
       .eq("market_id", input.marketId)
       .order("reported_at", { ascending: false })
       .limit(200);
     if (existingError) throw existingError;
 
-    // A reporter's own other reports can never count as corroboration for
-    // each other — otherwise submitting two reports yourself at a similar
-    // price would "verify" both, with no independent confirmation at all.
     const othersOnly = input.userId
       ? (existing ?? []).filter((r) => r.user_id !== input.userId)
       : existing ?? [];
 
     const evaluation = evaluateReportStatus(
-      input.price,
+      normalizedPrice,
       now,
-      input.unit,
+      normalizedUnit,
       othersOnly.map((r) => ({
         id: r.id,
-        price: Number(r.price),
         status: r.status,
         reportedAt: r.reported_at,
-        unit: r.unit,
+        normalizedUnit: r.normalized_unit,
+        normalizedPrice: Number(r.normalized_price),
       }))
     );
 
@@ -328,6 +295,9 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         user_id: input.userId ?? null,
         product_name: input.productName,
         unit: input.unit,
+        quantity: input.quantity,
+        normalized_unit: normalizedUnit,
+        normalized_price: normalizedPrice,
       })
       .select()
       .single();
@@ -355,6 +325,9 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         userId: data.user_id ?? undefined,
         productName: data.product_name,
         unit: data.unit,
+        quantity: Number(data.quantity),
+        normalizedUnit: data.normalized_unit,
+        normalizedPrice: Number(data.normalized_price),
       },
       pointsAwarded,
       totalPoints,
@@ -378,7 +351,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
       r.marketId === input.marketId &&
       (!input.userId || r.userId !== input.userId)
   );
-  const evaluation = evaluateReportStatus(input.price, now, input.unit, sameItemMarketReports);
+  const evaluation = evaluateReportStatus(normalizedPrice, now, normalizedUnit, sameItemMarketReports);
 
   const photoUrl = input.photoFile ? await fileToDataUrl(input.photoFile) : undefined;
   const newReport: PriceReport = {
@@ -394,6 +367,9 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     userId: input.userId,
     productName: input.productName,
     unit: input.unit,
+    quantity: input.quantity,
+    normalizedUnit,
+    normalizedPrice,
   };
 
   const upgraded = reports.map((r) =>
@@ -427,6 +403,9 @@ export async function listMyReports(userId: string): Promise<MyReportRow[]> {
       userId: row.user_id ?? undefined,
       productName: row.product_name,
       unit: row.unit,
+      quantity: Number(row.quantity),
+      normalizedUnit: row.normalized_unit,
+      normalizedPrice: Number(row.normalized_price),
       item: row.item,
       market: row.market,
     }));
@@ -454,34 +433,27 @@ export interface UpdateReportResult {
   report: PriceReport;
 }
 
-/**
- * Edits a report's price and re-runs the same daily verification logic
- * used for new reports. The report is also re-attributed to right now
- * (reported_at is bumped) — editing a price is, in effect, re-reporting
- * it today, and today's calendar day is what the whole daily-reset rule
- * keys off of. Both the report being edited AND this user's other reports
- * at this market are excluded from the comparison set (self-corroboration
- * guard, same as reportPrice()).
- *
- * NOTE: this only edits price, not productName/unit — the report's unit
- * stays whatever it was originally submitted as, and is what's used to
- * scope the re-evaluation below.
- */
 export async function updateMyReport(input: UpdateReportInput): Promise<UpdateReportResult> {
   const now = new Date().toISOString();
 
   if (isSupabaseConfigured && supabase) {
     const { data: current, error: currentError } = await supabase
       .from("price_reports")
-      .select("item_id, market_id, user_id, unit")
+      .select("item_id, market_id, user_id, unit, quantity")
       .eq("id", input.reportId)
       .single();
     if (currentError) throw currentError;
     if (current.user_id !== input.userId) throw new Error("You can only edit your own reports.");
 
+    const { normalizedUnit, normalizedPrice } = normalizeQuantity(
+      input.newPrice,
+      Number(current.quantity),
+      current.unit
+    );
+
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
-      .select("id, price, status, user_id, reported_at, unit")
+      .select("id, status, user_id, reported_at, normalized_unit, normalized_price")
       .eq("item_id", current.item_id)
       .eq("market_id", current.market_id)
       .neq("id", input.reportId)
@@ -489,26 +461,30 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
       .limit(200);
     if (existingError) throw existingError;
 
-    // Exclude this reporter's own other reports at this market — same
-    // self-corroboration guard as reportPrice() above.
     const othersOnly = (existing ?? []).filter((r) => r.user_id !== input.userId);
 
     const evaluation = evaluateReportStatus(
-      input.newPrice,
+      normalizedPrice,
       now,
-      current.unit,
+      normalizedUnit,
       othersOnly.map((r) => ({
         id: r.id,
-        price: Number(r.price),
         status: r.status,
         reportedAt: r.reported_at,
-        unit: r.unit,
+        normalizedUnit: r.normalized_unit,
+        normalizedPrice: Number(r.normalized_price),
       }))
     );
 
     const { data, error } = await supabase
       .from("price_reports")
-      .update({ price: input.newPrice, status: evaluation.status, reported_at: now })
+      .update({
+        price: input.newPrice,
+        status: evaluation.status,
+        reported_at: now,
+        normalized_unit: normalizedUnit,
+        normalized_price: normalizedPrice,
+      })
       .eq("id", input.reportId)
       .eq("user_id", input.userId)
       .select()
@@ -530,14 +506,18 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
         userId: data.user_id ?? undefined,
         productName: data.product_name,
         unit: data.unit,
+        quantity: Number(data.quantity),
+        normalizedUnit: data.normalized_unit,
+        normalizedPrice: Number(data.normalized_price),
       },
     };
   }
 
-  // Mock/local-dev branch.
   const reports = loadMockReports();
   const target = reports.find((r) => r.id === input.reportId && r.userId === input.userId);
   if (!target) throw new Error("Report not found.");
+
+  const { normalizedUnit, normalizedPrice } = normalizeQuantity(input.newPrice, target.quantity, target.unit);
 
   const others = reports.filter(
     (r) =>
@@ -546,10 +526,19 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
       r.marketId === target.marketId &&
       r.userId !== input.userId
   );
-  const evaluation = evaluateReportStatus(input.newPrice, now, target.unit, others);
+  const evaluation = evaluateReportStatus(normalizedPrice, now, normalizedUnit, others);
 
   const updated = reports.map((r) => {
-    if (r.id === input.reportId) return { ...r, price: input.newPrice, status: evaluation.status, reportedAt: now };
+    if (r.id === input.reportId) {
+      return {
+        ...r,
+        price: input.newPrice,
+        status: evaluation.status,
+        reportedAt: now,
+        normalizedUnit,
+        normalizedPrice,
+      };
+    }
     if (evaluation.upgradeReportIds.includes(r.id)) return { ...r, status: "verified" as const };
     return r;
   });
@@ -564,16 +553,6 @@ export interface DeleteReportResult {
   totalPoints: number;
 }
 
-/**
- * Deletes a report. Points earned from it are only clawed back if the
- * report was NOT verified at the time of deletion — a verified report
- * keeps its points permanently, even after deletion, per product rule.
- *
- * The clawback is recorded as a new, independent negative point_events
- * entry rather than deleting the original one, preserving an audit trail
- * and sidestepping any foreign-key/cascade complications from the report
- * row being deleted out from under it.
- */
 export async function deleteMyReport(reportId: string, userId: string): Promise<DeleteReportResult> {
   if (isSupabaseConfigured && supabase) {
     const { data: current, error: currentError } = await supabase

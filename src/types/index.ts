@@ -35,8 +35,11 @@ export interface PriceReport {
   photoUrl?: string;
   pointsAwarded?: number;
   userId?: string; // logged-in reporter's id, used for priority-visibility highlighting
-  productName: string; // NEW — specific brand/variant being priced, e.g. "Kinder Garlic"
-  unit: string; // NEW — measurement for this specific report (Kg, Pack, Piece, etc.), defaults to the item's catalog unit but can be overridden
+  productName: string; // specific brand/variant being priced, e.g. "Kinder Garlic"
+  unit: string; // measurement as entered (Kg, g, Pack, Piece, etc.)
+  quantity: number; // NEW — how much of `unit` this report's price covers, e.g. 500 for "500 g"
+  normalizedUnit: string; // NEW — "kg"/"liter" for convertible units, else same as `unit`
+  normalizedPrice: number; // NEW — price per 1 normalizedUnit; every comparison/verification runs on this
 }
 
 export interface PriceRowData extends PriceReport {

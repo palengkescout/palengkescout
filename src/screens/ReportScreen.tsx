@@ -7,7 +7,7 @@ import ReportSkeleton from "../components/ReportSkeleton";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
-import { UNIT_OPTIONS } from "../lib/units";
+import { UNIT_OPTIONS, normalizeQuantity } from "../lib/units";
 import { useAuth } from "../lib/authContext";
 import { RateLimitError } from "../lib/rateLimit";
 import type { Item, Market, PriceStatus } from "../types";
@@ -25,6 +25,7 @@ export default function ReportScreen() {
   const [marketId, setMarketId] = useState("");
   const [productName, setProductName] = useState("");
   const [unit, setUnit] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const [price, setPrice] = useState("");
   const [reporterName, setReporterName] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -82,13 +83,33 @@ export default function ReportScreen() {
   const selectedItem = items.find((i) => i.id === itemId);
 
   useEffect(() => {
-    if (selectedItem) setUnit(selectedItem.unit);
+    if (selectedItem) {
+      setUnit(selectedItem.unit);
+      setQuantity("1");
+    }
   }, [selectedItem]);
+
+  const unitLabel = UNIT_OPTIONS.find((u) => u.value === unit)?.label ?? unit;
 
   const priceValue = Number(price);
   const isValidPrice = price.trim() !== "" && !Number.isNaN(priceValue) && priceValue > 0;
+  const quantityValue = Number(quantity);
+  const isValidQuantity = quantity.trim() !== "" && !Number.isNaN(quantityValue) && quantityValue > 0;
+
   const canSubmit =
-    itemId && marketId && isValidPrice && productName.trim() !== "" && unit && !submitting;
+    itemId &&
+    marketId &&
+    isValidPrice &&
+    productName.trim() !== "" &&
+    unit &&
+    isValidQuantity &&
+    !submitting;
+
+  const normalizedPreview = useMemo(() => {
+    if (!unit || !isValidPrice || !isValidQuantity) return null;
+    const { normalizedUnit, normalizedPrice } = normalizeQuantity(priceValue, quantityValue, unit);
+    return { normalizedUnit, normalizedPrice };
+  }, [unit, isValidPrice, isValidQuantity, priceValue, quantityValue]);
 
   function handlePhotoSelect(file: File | null) {
     setPhotoFile(file);
@@ -101,6 +122,7 @@ export default function ReportScreen() {
     if (!canSubmit) {
       if (!isValidPrice) setError("Enter a valid price greater than ₱0.");
       else if (productName.trim() === "") setError("Add the specific product name.");
+      else if (!isValidQuantity) setError("Enter a valid quantity greater than 0.");
       return;
     }
     setError(null);
@@ -115,6 +137,7 @@ export default function ReportScreen() {
         userId: user?.id,
         productName: productName.trim(),
         unit,
+        quantity: quantityValue,
       });
       setResult({ pointsAwarded, totalPoints, status: report.status, multiplierApplied });
     } catch (err) {
@@ -132,6 +155,7 @@ export default function ReportScreen() {
     setResult(null);
     setPrice("");
     setProductName("");
+    setQuantity("1");
     handlePhotoSelect(null);
   }
 
@@ -305,30 +329,42 @@ export default function ReportScreen() {
             <input
               id="productName"
               type="text"
-              placeholder="e.g. Whole Chicken, UFC Ketchup 320g"
+              placeholder="e.g. Kinder Garlic, UFC Ketchup 320g"
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
               className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
             />
           </div>
 
-          <Dropdown
-            id="unit"
-            label="Measurement"
-            value={unit}
-            options={UNIT_OPTIONS}
-            onChange={setUnit}
-            placeholder="Select a unit"
-          />
+          {}
+          <div>
+            <label className="block text-sm font-semibold text-ink mb-2">Amount you're pricing</label>
+            <div className="flex gap-3">
+              <input
+                id="quantity"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                placeholder="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="flex-1 min-w-0 bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
+              />
+              <div className="w-[132px] shrink-0">
+                <Dropdown id="unit" value={unit} options={UNIT_OPTIONS} onChange={setUnit} placeholder="Unit" />
+              </div>
+            </div>
+          </div>
 
           <p className="text-ink-faint text-xs px-1">
-            Note the specific brand or pack size — this keeps price comparisons accurate.
+            Please note the specific brand or pack size - this keeps price comparisons accurate.
           </p>
         </div>
 
         <div>
           <label htmlFor="price" className="block text-sm font-semibold text-ink mb-2">
-            Price {unit ? `(per ${UNIT_OPTIONS.find((u) => u.value === unit)?.label.toLowerCase() ?? unit})` : ""}
+            {unit ? `Total price for ${quantity || "0"} ${unitLabel}` : "Price"}
           </label>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-faint text-[15px]">₱</span>
@@ -344,6 +380,13 @@ export default function ReportScreen() {
               className="w-full bg-white rounded-card shadow-card pl-9 pr-4 py-3.5 text-[15px] outline-none min-h-[48px]"
             />
           </div>
+
+          {}
+          {normalizedPreview && (
+            <p className="text-palengke-green text-xs font-medium mt-2 px-1">
+              ≈ ₱{normalizedPreview.normalizedPrice.toFixed(2)} per {normalizedPreview.normalizedUnit}
+            </p>
+          )}
         </div>
 
         <div>

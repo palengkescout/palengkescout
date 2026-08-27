@@ -1,6 +1,13 @@
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 import { seedItems, seedMarkets, seedPriceReports } from "../data/seed";
-import { recordPoints, getTotalPoints, POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "./points";
+import {
+  recordPoints,
+  getTotalPoints,
+  POINTS_FOR_PHOTO,
+  POINTS_FOR_PRODUCT_NAME,
+  POINTS_FOR_REPORT,
+  POINTS_FOR_VERIFICATION,
+} from "./points";
 import { evaluateReportStatus } from "./verification";
 import { normalizeQuantity } from "./units";
 import { isEligibleForMultiplier } from "./leaderboard";
@@ -185,13 +192,63 @@ export async function listRecentReports(limit: number): Promise<RecentReportInfo
     .filter((r): r is RecentReportInfo => r !== null);
 }
 
-async function tryUpgradeMatchingReports(ids: string[]): Promise<void> {
-  if (ids.length === 0 || !supabase) return;
+interface UpgradeCandidate {
+  id: string;
+  previousStatus: PriceStatus;
+  userId?: string;
+}
+
+/**
+ * Upgrades other pending reports to "verified" once a new/edited report
+ * anchors a large-enough consensus cluster (see verification.ts), and
+ * awards each newly-verified report's owner the +10 verification bonus.
+ *
+ * Both the status update and each point award are cross-user writes —
+ * they touch rows/accounts that don't belong to the caller — so both are
+ * wrapped defensively. price_reports has no RLS policy permitting a
+ * cross-user status update by design (see migration 007's notes on why a
+ * broader policy would be unsafe); point_events may have a similar
+ * restriction that hasn't been confirmed either way. Each failure is
+ * logged and skipped rather than allowed to break the report the person
+ * actually just submitted or edited.
+ *
+ * Only candidates whose *previous* status wasn't already "verified" get
+ * the bonus — a report that's re-matched into a cluster it was already
+ * part of shouldn't be paid again every time a new report happens to
+ * match it the same day.
+ */
+async function tryUpgradeAndRewardMatchingReports(candidates: UpgradeCandidate[]): Promise<void> {
+  if (candidates.length === 0 || !supabase) return;
+
   try {
-    const { error } = await supabase.from("price_reports").update({ status: "verified" }).in("id", ids);
+    const { error } = await supabase
+      .from("price_reports")
+      .update({ status: "verified" })
+      .in(
+        "id",
+        candidates.map((c) => c.id)
+      );
     if (error) throw error;
   } catch (err) {
     console.error("Could not upgrade matching reports to verified (likely RLS — see migration 007 notes):", err);
+    return; // the status change didn't happen, so don't pay out bonuses for it
+  }
+
+  for (const candidate of candidates) {
+    if (candidate.previousStatus === "verified" || !candidate.userId) continue;
+    try {
+      await recordPoints({
+        userId: candidate.userId,
+        points: POINTS_FOR_VERIFICATION,
+        reason: "verified_bonus",
+        priceReportId: candidate.id,
+      });
+    } catch (err) {
+      console.error(
+        `Could not award verification bonus for report ${candidate.id} (possibly an RLS restriction on inserting point_events for another user, or a CHECK constraint that doesn't yet allow reason='verified_bonus'):`,
+        err
+      );
+    }
   }
 }
 
@@ -212,6 +269,7 @@ export interface ReportPriceResult {
   pointsAwarded: number;
   totalPoints: number;
   multiplierApplied: boolean;
+  verificationBonusAwarded: number; // 0 or POINTS_FOR_VERIFICATION — already folded into pointsAwarded, broken out so the UI can call it out separately
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -233,9 +291,12 @@ async function uploadPhotoToSupabase(file: File): Promise<string> {
 }
 
 export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceResult> {
-  const baseline = POINTS_FOR_REPORT + (input.photoFile ? POINTS_FOR_PHOTO : 0);
+  const baseline =
+    POINTS_FOR_REPORT +
+    (input.productName.trim() ? POINTS_FOR_PRODUCT_NAME : 0) +
+    (input.photoFile ? POINTS_FOR_PHOTO : 0);
   const multiplierApplied = input.userId ? await isEligibleForMultiplier(input.userId) : false;
-  const pointsAwarded = multiplierApplied ? Math.round(baseline * 1.5) : baseline;
+  const baselinePoints = multiplierApplied ? Math.round(baseline * 1.5) : baseline;
   const reason = input.photoFile ? "report_with_photo" : "report";
   const now = new Date().toISOString();
 
@@ -303,14 +364,35 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
       .single();
     if (error) throw error;
 
-    await tryUpgradeMatchingReports(evaluation.upgradeReportIds);
+    const upgradeCandidates: UpgradeCandidate[] = othersOnly
+      .filter((r) => evaluation.upgradeReportIds.includes(r.id))
+      .map((r) => ({ id: r.id, previousStatus: r.status as PriceStatus, userId: r.user_id ?? undefined }));
+    await tryUpgradeAndRewardMatchingReports(upgradeCandidates);
 
-    const totalPoints = await recordPoints({
+    let totalPoints = await recordPoints({
       userId: input.userId,
-      points: pointsAwarded,
+      points: baselinePoints,
       reason,
       priceReportId: data.id,
     });
+
+    // A brand-new report has no "previous status" to compare against — if
+    // it lands as verified immediately (a 3rd matching report already
+    // existed today), the bonus applies right away.
+    let verificationBonusAwarded = 0;
+    if (evaluation.status === "verified" && input.userId) {
+      try {
+        totalPoints = await recordPoints({
+          userId: input.userId,
+          points: POINTS_FOR_VERIFICATION,
+          reason: "verified_bonus",
+          priceReportId: data.id,
+        });
+        verificationBonusAwarded = POINTS_FOR_VERIFICATION;
+      } catch (err) {
+        console.error("Could not award self verification bonus:", err);
+      }
+    }
 
     return {
       report: {
@@ -329,9 +411,10 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         normalizedUnit: data.normalized_unit,
         normalizedPrice: Number(data.normalized_price),
       },
-      pointsAwarded,
+      pointsAwarded: baselinePoints + verificationBonusAwarded,
       totalPoints,
       multiplierApplied,
+      verificationBonusAwarded,
     };
   }
 
@@ -344,7 +427,6 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     enforceReportCooldown(ownReports[0]?.reportedAt ?? null);
   }
 
-  // Same self-corroboration exclusion as the Supabase branch above.
   const sameItemMarketReports = reports.filter(
     (r) =>
       r.itemId === input.itemId &&
@@ -363,7 +445,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     reportedAt: now,
     reporterName: input.reporterName || "Anonymous",
     photoUrl,
-    pointsAwarded,
+    pointsAwarded: baselinePoints,
     userId: input.userId,
     productName: input.productName,
     unit: input.unit,
@@ -372,14 +454,40 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     normalizedPrice,
   };
 
+  const upgradeCandidates: UpgradeCandidate[] = sameItemMarketReports
+    .filter((r) => evaluation.upgradeReportIds.includes(r.id))
+    .map((r) => ({ id: r.id, previousStatus: r.status, userId: r.userId }));
+
   const upgraded = reports.map((r) =>
     evaluation.upgradeReportIds.includes(r.id) ? { ...r, status: "verified" as const } : r
   );
   const updated = [newReport, ...upgraded];
   saveMockReports(updated);
 
-  const totalPoints = await recordPoints({ userId: input.userId, points: pointsAwarded, reason });
-  return { report: newReport, pointsAwarded, totalPoints, multiplierApplied };
+  // Mirror the same "only newly-transitioning reports get paid" rule in
+  // mock mode. Mock mode's local point tally isn't actually segmented per
+  // user (it's one shared on-device number), so this mainly exists to keep
+  // the two code paths behaving identically for testing.
+  for (const candidate of upgradeCandidates) {
+    if (candidate.previousStatus === "verified") continue;
+    await recordPoints({ userId: candidate.userId, points: POINTS_FOR_VERIFICATION, reason: "verified_bonus" });
+  }
+
+  let totalPoints = await recordPoints({ userId: input.userId, points: baselinePoints, reason });
+
+  let verificationBonusAwarded = 0;
+  if (evaluation.status === "verified") {
+    totalPoints = await recordPoints({ userId: input.userId, points: POINTS_FOR_VERIFICATION, reason: "verified_bonus" });
+    verificationBonusAwarded = POINTS_FOR_VERIFICATION;
+  }
+
+  return {
+    report: newReport,
+    pointsAwarded: baselinePoints + verificationBonusAwarded,
+    totalPoints,
+    multiplierApplied,
+    verificationBonusAwarded,
+  };
 }
 
 /** All of a user's own reports, joined with item + market, newest first. */
@@ -431,6 +539,7 @@ export interface UpdateReportInput {
 
 export interface UpdateReportResult {
   report: PriceReport;
+  verificationBonusAwarded: number; // 0 or POINTS_FOR_VERIFICATION
 }
 
 export async function updateMyReport(input: UpdateReportInput): Promise<UpdateReportResult> {
@@ -439,11 +548,13 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
   if (isSupabaseConfigured && supabase) {
     const { data: current, error: currentError } = await supabase
       .from("price_reports")
-      .select("item_id, market_id, user_id, unit, quantity")
+      .select("item_id, market_id, user_id, unit, quantity, status")
       .eq("id", input.reportId)
       .single();
     if (currentError) throw currentError;
     if (current.user_id !== input.userId) throw new Error("You can only edit your own reports.");
+
+    const previousStatus = current.status as PriceStatus;
 
     const { normalizedUnit, normalizedPrice } = normalizeQuantity(
       input.newPrice,
@@ -491,7 +602,25 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
       .single();
     if (error) throw error;
 
-    await tryUpgradeMatchingReports(evaluation.upgradeReportIds);
+    const upgradeCandidates: UpgradeCandidate[] = othersOnly
+      .filter((r) => evaluation.upgradeReportIds.includes(r.id))
+      .map((r) => ({ id: r.id, previousStatus: r.status as PriceStatus, userId: r.user_id ?? undefined }));
+    await tryUpgradeAndRewardMatchingReports(upgradeCandidates);
+
+    let verificationBonusAwarded = 0;
+    if (evaluation.status === "verified" && previousStatus !== "verified") {
+      try {
+        await recordPoints({
+          userId: input.userId,
+          points: POINTS_FOR_VERIFICATION,
+          reason: "verified_bonus",
+          priceReportId: input.reportId,
+        });
+        verificationBonusAwarded = POINTS_FOR_VERIFICATION;
+      } catch (err) {
+        console.error("Could not award verification bonus on edit:", err);
+      }
+    }
 
     return {
       report: {
@@ -510,6 +639,7 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
         normalizedUnit: data.normalized_unit,
         normalizedPrice: Number(data.normalized_price),
       },
+      verificationBonusAwarded,
     };
   }
 
@@ -517,6 +647,7 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
   const target = reports.find((r) => r.id === input.reportId && r.userId === input.userId);
   if (!target) throw new Error("Report not found.");
 
+  const previousStatus = target.status;
   const { normalizedUnit, normalizedPrice } = normalizeQuantity(input.newPrice, target.quantity, target.unit);
 
   const others = reports.filter(
@@ -544,8 +675,20 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
   });
   saveMockReports(updated);
 
+  const upgradeCandidates = others.filter((r) => evaluation.upgradeReportIds.includes(r.id));
+  for (const candidate of upgradeCandidates) {
+    if (candidate.status === "verified") continue;
+    await recordPoints({ userId: candidate.userId, points: POINTS_FOR_VERIFICATION, reason: "verified_bonus" });
+  }
+
+  let verificationBonusAwarded = 0;
+  if (evaluation.status === "verified" && previousStatus !== "verified") {
+    await recordPoints({ userId: input.userId, points: POINTS_FOR_VERIFICATION, reason: "verified_bonus" });
+    verificationBonusAwarded = POINTS_FOR_VERIFICATION;
+  }
+
   const updatedReport = updated.find((r) => r.id === input.reportId)!;
-  return { report: updatedReport };
+  return { report: updatedReport, verificationBonusAwarded };
 }
 
 export interface DeleteReportResult {

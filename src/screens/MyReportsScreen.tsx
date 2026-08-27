@@ -79,10 +79,14 @@ export default function MyReportsScreen() {
     setSavingEdit(true);
     setEditError(null);
     try {
-      const { report } = await updateMyReport({ reportId: row.id, userId: user.id, newPrice });
+      const { report, verificationBonusAwarded } = await updateMyReport({ reportId: row.id, userId: user.id, newPrice });
       setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, price: report.price, status: report.status } : r)));
       setEditingId(null);
-      showToast(`Price updated — now marked ${STATUS_STYLES[report.status].label}.`);
+      showToast(
+        verificationBonusAwarded > 0
+          ? `Price updated — now Verified! +${verificationBonusAwarded} bonus pts.`
+          : `Price updated — now marked ${STATUS_STYLES[report.status].label}.`
+      );
     } catch {
       setEditError("Couldn't save that change. Please try again.");
     } finally {

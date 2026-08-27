@@ -3,7 +3,9 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 const LOCAL_POINTS_KEY = "palengkescout_points_v1"; // fallback only when Supabase isn't configured
 
 export const POINTS_FOR_REPORT = 5;
+export const POINTS_FOR_PRODUCT_NAME = 5; // awarded alongside POINTS_FOR_REPORT whenever a product name is provided — currently always, since the field is required
 export const POINTS_FOR_PHOTO = 10;
+export const POINTS_FOR_VERIFICATION = 10; // awarded once, the moment a report actually becomes verified — may happen well after submission, and to a different report than the one that triggered it
 
 function getLocalPoints(): number {
   const raw = localStorage.getItem(LOCAL_POINTS_KEY);
@@ -19,7 +21,7 @@ function addLocalPoints(amount: number): number {
 export interface RecordPointsInput {
   userId?: string;
   points: number;
-  reason: "report" | "report_with_photo";
+  reason: "report" | "report_with_photo" | "verified_bonus";
   priceReportId?: string;
 }
 
@@ -29,6 +31,11 @@ export interface RecordPointsInput {
  * feeding the weekly/monthly leaderboards. Otherwise it falls back to a
  * local, device-only tally, used only in local dev without a Supabase
  * project configured (reporting already requires login in the real app).
+ *
+ * "verified_bonus" is new — if point_events has a CHECK constraint
+ * restricting `reason` to a fixed set of values, that constraint needs to
+ * be updated to allow this one, or every verification-bonus insert will
+ * fail.
  */
 export async function recordPoints(input: RecordPointsInput): Promise<number> {
   if (isSupabaseConfigured && supabase && input.userId) {

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Camera, X, Award, LogIn, Flame, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Camera, X, Award, LogIn, Flame, TriangleAlert, Sparkles } from "lucide-react";
 import TopBar from "../components/TopBar";
 import Dropdown from "../components/Dropdown";
 import ReportSkeleton from "../components/ReportSkeleton";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
-import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
+import { POINTS_FOR_PHOTO, POINTS_FOR_PRODUCT_NAME, POINTS_FOR_REPORT, POINTS_FOR_VERIFICATION } from "../lib/points";
 import { UNIT_OPTIONS, normalizeQuantity } from "../lib/units";
 import { useAuth } from "../lib/authContext";
 import { RateLimitError } from "../lib/rateLimit";
@@ -36,6 +36,7 @@ export default function ReportScreen() {
     totalPoints: number;
     status: PriceStatus;
     multiplierApplied: boolean;
+    verificationBonusAwarded: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -111,6 +112,11 @@ export default function ReportScreen() {
     return { normalizedUnit, normalizedPrice };
   }, [unit, isValidPrice, isValidQuantity, priceValue, quantityValue]);
 
+  // Guaranteed points for a valid submission, shown up front so the
+  // person knows what they're earning before they tap submit. Photo and
+  // the verification bonus are separate, called out on their own.
+  const baseGuaranteedPoints = POINTS_FOR_REPORT + POINTS_FOR_PRODUCT_NAME;
+
   function handlePhotoSelect(file: File | null) {
     setPhotoFile(file);
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -128,7 +134,7 @@ export default function ReportScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const { report, pointsAwarded, totalPoints, multiplierApplied } = await reportPrice({
+      const { report, pointsAwarded, totalPoints, multiplierApplied, verificationBonusAwarded } = await reportPrice({
         itemId,
         marketId,
         price: priceValue,
@@ -139,7 +145,7 @@ export default function ReportScreen() {
         unit,
         quantity: quantityValue,
       });
-      setResult({ pointsAwarded, totalPoints, status: report.status, multiplierApplied });
+      setResult({ pointsAwarded, totalPoints, status: report.status, multiplierApplied, verificationBonusAwarded });
     } catch (err) {
       if (err instanceof RateLimitError) {
         setError(err.message);
@@ -265,6 +271,13 @@ export default function ReportScreen() {
             </div>
           )}
 
+          {result.verificationBonusAwarded > 0 && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-fresh-green rounded-pill px-3 py-1.5 mb-3">
+              <Sparkles size={13} strokeWidth={2.4} />
+              +{result.verificationBonusAwarded} bonus — verified on arrival!
+            </div>
+          )}
+
           <div className="flex items-center gap-2 bg-palengke-gold/15 text-palengke-gold-dark rounded-pill px-4 py-2 mb-6">
             <Award size={18} strokeWidth={2} />
             <span className="text-sm font-semibold">
@@ -323,13 +336,18 @@ export default function ReportScreen() {
           </h2>
 
           <div>
-            <label htmlFor="productName" className="block text-sm font-semibold text-ink mb-2">
-              Product name
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="productName" className="block text-sm font-semibold text-ink">
+                Product name
+              </label>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-palengke-gold-dark">
+                <Award size={13} strokeWidth={2.2} />+{POINTS_FOR_PRODUCT_NAME} pts
+              </span>
+            </div>
             <input
               id="productName"
               type="text"
-              placeholder="e.g. Kinder Garlic, UFC Ketchup 320g"
+              placeholder="e.g. Whole Chicken, UFC Ketchup 320g"
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
               className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
@@ -338,7 +356,7 @@ export default function ReportScreen() {
 
           {}
           <div>
-            <label className="block text-sm font-semibold text-ink mb-2">Amount you're pricing</label>
+            <label className="block text-sm font-semibold text-ink mb-2">Amount of item</label>
             <div className="flex gap-3">
               <input
                 id="quantity"
@@ -447,8 +465,9 @@ export default function ReportScreen() {
             onChange={(e) => setReporterName(e.target.value)}
             className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
           />
-          <p className="text-ink-faint text-xs mt-2">
-            Adding your name builds your contributor reputation - coming in a later update.
+          <p className="flex items-center gap-1.5 text-ink-faint text-xs mt-2 whitespace-nowrap">
+            <Sparkles size={12} strokeWidth={2.2} className="text-palengke-green shrink-0" />
+            Verified reports earn an extra +{POINTS_FOR_VERIFICATION} points.
           </p>
         </div>
 
@@ -463,7 +482,7 @@ export default function ReportScreen() {
           disabled={!canSubmit}
           className="mt-1 w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px] disabled:opacity-40 transition-opacity duration-200"
         >
-          {submitting ? "Submitting..." : `Submit report · +${POINTS_FOR_REPORT} pts`}
+          {submitting ? "Submitting..." : `Submit report · +${baseGuaranteedPoints} pts`}
         </button>
       </form>
     </div>

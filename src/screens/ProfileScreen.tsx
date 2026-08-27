@@ -225,7 +225,7 @@ export default function ProfileScreen() {
           {multiplierEligible && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-palengke-green rounded-pill px-3 py-1.5 w-fit mb-3">
               <Flame size={13} strokeWidth={2.4} />
-              1.5x points active this week — you were Top 3 last week!
+              1.5x points active this week, you were Top 3 last week!
             </div>
           )}
 
@@ -367,7 +367,7 @@ export default function ProfileScreen() {
 
           {leaderboard.length === 0 ? (
             <p className="text-ink-faint text-xs py-6 text-center">
-              No points logged yet for this period — be the first!
+              No points logged yet for this period - be the first!
             </p>
           ) : (
             <>
@@ -379,7 +379,7 @@ export default function ProfileScreen() {
                   onClick={() => navigate("/report")}
                   className="w-full text-center text-xs font-semibold text-palengke-green mt-3 pt-3 border-t border-dashed border-black/10"
                 >
-                  Report a price to join the leaderboard this {period === "week" ? "week" : "month"} →
+                  Report a price to join the leaderboard this {period === "week" ? "week" : "month"}
                 </button>
               ) : (
                 myRank >= 10 &&

@@ -57,6 +57,8 @@ function mapSupabaseRow(row: any): PriceRowData {
     reporterName: row.reporter_name,
     photoUrl: row.photo_url ?? undefined,
     userId: row.user_id ?? undefined,
+    productName: row.product_name,
+    unit: row.unit,
     market: {
       id: row.market.id,
       name: row.market.name,
@@ -100,6 +102,13 @@ export interface LowestPriceInfo {
  * Lowest currently-visible price per item, plus who reported it — the
  * reporter id is used to show a "Top Scout" badge on the Home screen card
  * when that reporter is currently in this week's top 3.
+ *
+ * NOTE: this is intentionally still keyed by item only, not item+unit.
+ * "Lowest price" as a raw number is only meaningful for comparison when
+ * units match; if you start seeing mixed-unit reports pull this number
+ * in a misleading direction (e.g. a "Pack" price undercutting the usual
+ * "Kg" price), group by item+unit here the same way listing/sorting logic
+ * elsewhere should.
  */
 export async function listLowestPrices(): Promise<Record<string, LowestPriceInfo | null>> {
   const result: Record<string, LowestPriceInfo | null> = {};
@@ -226,6 +235,8 @@ export interface ReportPriceInput {
   reporterName: string;
   photoFile?: File;
   userId?: string;
+  productName: string; // NEW — required, the specific brand/variant being priced
+  unit: string; // NEW — required, the measurement for this specific report
 }
 
 export interface ReportPriceResult {
@@ -277,7 +288,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
 
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
-      .select("id, price, status, user_id, reported_at")
+      .select("id, price, status, user_id, reported_at, unit")
       .eq("item_id", input.itemId)
       .eq("market_id", input.marketId)
       .order("reported_at", { ascending: false })
@@ -294,7 +305,14 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     const evaluation = evaluateReportStatus(
       input.price,
       now,
-      othersOnly.map((r) => ({ id: r.id, price: Number(r.price), status: r.status, reportedAt: r.reported_at }))
+      input.unit,
+      othersOnly.map((r) => ({
+        id: r.id,
+        price: Number(r.price),
+        status: r.status,
+        reportedAt: r.reported_at,
+        unit: r.unit,
+      }))
     );
 
     const photoUrl = input.photoFile ? await uploadPhotoToSupabase(input.photoFile) : undefined;
@@ -308,6 +326,8 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         reporter_name: input.reporterName,
         photo_url: photoUrl,
         user_id: input.userId ?? null,
+        product_name: input.productName,
+        unit: input.unit,
       })
       .select()
       .single();
@@ -333,6 +353,8 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
         reporterName: data.reporter_name,
         photoUrl: data.photo_url ?? undefined,
         userId: data.user_id ?? undefined,
+        productName: data.product_name,
+        unit: data.unit,
       },
       pointsAwarded,
       totalPoints,
@@ -356,7 +378,7 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
       r.marketId === input.marketId &&
       (!input.userId || r.userId !== input.userId)
   );
-  const evaluation = evaluateReportStatus(input.price, now, sameItemMarketReports);
+  const evaluation = evaluateReportStatus(input.price, now, input.unit, sameItemMarketReports);
 
   const photoUrl = input.photoFile ? await fileToDataUrl(input.photoFile) : undefined;
   const newReport: PriceReport = {
@@ -370,6 +392,8 @@ export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceR
     photoUrl,
     pointsAwarded,
     userId: input.userId,
+    productName: input.productName,
+    unit: input.unit,
   };
 
   const upgraded = reports.map((r) =>
@@ -401,6 +425,8 @@ export async function listMyReports(userId: string): Promise<MyReportRow[]> {
       reporterName: row.reporter_name,
       photoUrl: row.photo_url ?? undefined,
       userId: row.user_id ?? undefined,
+      productName: row.product_name,
+      unit: row.unit,
       item: row.item,
       market: row.market,
     }));
@@ -436,6 +462,10 @@ export interface UpdateReportResult {
  * keys off of. Both the report being edited AND this user's other reports
  * at this market are excluded from the comparison set (self-corroboration
  * guard, same as reportPrice()).
+ *
+ * NOTE: this only edits price, not productName/unit — the report's unit
+ * stays whatever it was originally submitted as, and is what's used to
+ * scope the re-evaluation below.
  */
 export async function updateMyReport(input: UpdateReportInput): Promise<UpdateReportResult> {
   const now = new Date().toISOString();
@@ -443,7 +473,7 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
   if (isSupabaseConfigured && supabase) {
     const { data: current, error: currentError } = await supabase
       .from("price_reports")
-      .select("item_id, market_id, user_id")
+      .select("item_id, market_id, user_id, unit")
       .eq("id", input.reportId)
       .single();
     if (currentError) throw currentError;
@@ -451,7 +481,7 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
 
     const { data: existing, error: existingError } = await supabase
       .from("price_reports")
-      .select("id, price, status, user_id, reported_at")
+      .select("id, price, status, user_id, reported_at, unit")
       .eq("item_id", current.item_id)
       .eq("market_id", current.market_id)
       .neq("id", input.reportId)
@@ -466,7 +496,14 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
     const evaluation = evaluateReportStatus(
       input.newPrice,
       now,
-      othersOnly.map((r) => ({ id: r.id, price: Number(r.price), status: r.status, reportedAt: r.reported_at }))
+      current.unit,
+      othersOnly.map((r) => ({
+        id: r.id,
+        price: Number(r.price),
+        status: r.status,
+        reportedAt: r.reported_at,
+        unit: r.unit,
+      }))
     );
 
     const { data, error } = await supabase
@@ -491,6 +528,8 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
         reporterName: data.reporter_name,
         photoUrl: data.photo_url ?? undefined,
         userId: data.user_id ?? undefined,
+        productName: data.product_name,
+        unit: data.unit,
       },
     };
   }
@@ -507,7 +546,7 @@ export async function updateMyReport(input: UpdateReportInput): Promise<UpdateRe
       r.marketId === target.marketId &&
       r.userId !== input.userId
   );
-  const evaluation = evaluateReportStatus(input.newPrice, now, others);
+  const evaluation = evaluateReportStatus(input.newPrice, now, target.unit, others);
 
   const updated = reports.map((r) => {
     if (r.id === input.reportId) return { ...r, price: input.newPrice, status: evaluation.status, reportedAt: now };

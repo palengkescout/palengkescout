@@ -25,6 +25,7 @@ export interface ReportForEvaluation {
   price: number;
   status: PriceStatus;
   reportedAt: string;
+  unit: string; // NEW — only reports priced in the SAME unit may corroborate or flag one another
 }
 
 export interface StatusEvaluation {
@@ -35,11 +36,17 @@ export interface StatusEvaluation {
 export function evaluateReportStatus(
   newPrice: number,
   newReportedAt: string,
+  newUnit: string, // NEW — the unit of the report being evaluated
   existingReportsSameMarket: ReportForEvaluation[]
 ): StatusEvaluation {
   const today = manilaDateKey(newReportedAt);
 
-  const matchingToday = existingReportsSameMarket.filter(
+  // Restrict comparison to reports in the same unit first. Without this,
+  // a ₱50/piece report and a ₱50/kg report could wrongly confirm or flag
+  // each other even though they're not describing the same price at all.
+  const sameUnit = existingReportsSameMarket.filter((r) => r.unit === newUnit);
+
+  const matchingToday = sameUnit.filter(
     (r) => samePrice(r.price, newPrice) && manilaDateKey(r.reportedAt) === today
   );
 
@@ -50,9 +57,9 @@ export function evaluateReportStatus(
 
   // Not enough confirmations yet for this exact price today. Before
   // leaving it as pending, check it against whatever price *did* reach
-  // consensus today, if any — a huge divergence from an already-confirmed
-  // price gets flagged rather than silently ignored.
-  const verifiedToday = existingReportsSameMarket.filter(
+  // consensus today for the same unit, if any — a huge divergence from an
+  // already-confirmed price gets flagged rather than silently ignored.
+  const verifiedToday = sameUnit.filter(
     (r) => r.status === "verified" && manilaDateKey(r.reportedAt) === today
   );
   if (verifiedToday.length > 0) {

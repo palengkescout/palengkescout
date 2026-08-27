@@ -35,14 +35,14 @@ export interface PriceReport {
   photoUrl?: string;
   pointsAwarded?: number;
   userId?: string; // logged-in reporter's id, used for priority-visibility highlighting
+  productName: string; // NEW — specific brand/variant being priced, e.g. "Kinder Garlic"
+  unit: string; // NEW — measurement for this specific report (Kg, Pack, Piece, etc.), defaults to the item's catalog unit but can be overridden
 }
 
 export interface PriceRowData extends PriceReport {
   market: Market;
 }
 
-/** A report joined with its item and market — used on the My Reports
- * screen, where a single list spans many different items. */
 export interface MyReportRow extends PriceReport {
   item: Item;
   market: Market;

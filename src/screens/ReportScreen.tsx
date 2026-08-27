@@ -7,6 +7,7 @@ import ReportSkeleton from "../components/ReportSkeleton";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_REPORT } from "../lib/points";
+import { UNIT_OPTIONS } from "../lib/units";
 import { useAuth } from "../lib/authContext";
 import { RateLimitError } from "../lib/rateLimit";
 import type { Item, Market, PriceStatus } from "../types";
@@ -22,6 +23,8 @@ export default function ReportScreen() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [itemId, setItemId] = useState(searchParams.get("item") ?? "");
   const [marketId, setMarketId] = useState("");
+  const [productName, setProductName] = useState("");
+  const [unit, setUnit] = useState("");
   const [price, setPrice] = useState("");
   const [reporterName, setReporterName] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -77,9 +80,15 @@ export default function ReportScreen() {
   );
 
   const selectedItem = items.find((i) => i.id === itemId);
+
+  useEffect(() => {
+    if (selectedItem) setUnit(selectedItem.unit);
+  }, [selectedItem]);
+
   const priceValue = Number(price);
   const isValidPrice = price.trim() !== "" && !Number.isNaN(priceValue) && priceValue > 0;
-  const canSubmit = itemId && marketId && isValidPrice && !submitting;
+  const canSubmit =
+    itemId && marketId && isValidPrice && productName.trim() !== "" && unit && !submitting;
 
   function handlePhotoSelect(file: File | null) {
     setPhotoFile(file);
@@ -91,6 +100,7 @@ export default function ReportScreen() {
     e.preventDefault();
     if (!canSubmit) {
       if (!isValidPrice) setError("Enter a valid price greater than ₱0.");
+      else if (productName.trim() === "") setError("Add the specific product name.");
       return;
     }
     setError(null);
@@ -103,6 +113,8 @@ export default function ReportScreen() {
         reporterName: reporterName.trim() || "Anonymous",
         photoFile: photoFile ?? undefined,
         userId: user?.id,
+        productName: productName.trim(),
+        unit,
       });
       setResult({ pointsAwarded, totalPoints, status: report.status, multiplierApplied });
     } catch (err) {
@@ -119,6 +131,7 @@ export default function ReportScreen() {
   function resetForm() {
     setResult(null);
     setPrice("");
+    setProductName("");
     handlePhotoSelect(null);
   }
 
@@ -258,7 +271,7 @@ export default function ReportScreen() {
     <div className="app-shell bg-cream">
       <TopBar title="Report a Price" subtitle="Help your neighbors shop smarter." />
 
-      <form onSubmit={handleSubmit} className="app-content px-5 pt-5 pb-8 flex flex-col gap-5">
+      <form onSubmit={handleSubmit} className="app-content px-5 pt-5 pb-8 flex flex-col gap-6">
         <Dropdown
           id="item"
           label="Item"
@@ -279,9 +292,43 @@ export default function ReportScreen() {
           placeholder="Select a market or store"
         />
 
+        {}
+        <div className="flex flex-col gap-3">
+          <h2 className="text-[13px] font-semibold text-ink-faint uppercase tracking-wide px-1 -mb-1">
+            Product details
+          </h2>
+
+          <div>
+            <label htmlFor="productName" className="block text-sm font-semibold text-ink mb-2">
+              Product name
+            </label>
+            <input
+              id="productName"
+              type="text"
+              placeholder="e.g. Whole Chicken, UFC Ketchup 320g"
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
+            />
+          </div>
+
+          <Dropdown
+            id="unit"
+            label="Measurement"
+            value={unit}
+            options={UNIT_OPTIONS}
+            onChange={setUnit}
+            placeholder="Select a unit"
+          />
+
+          <p className="text-ink-faint text-xs px-1">
+            Note the specific brand or pack size — this keeps price comparisons accurate.
+          </p>
+        </div>
+
         <div>
           <label htmlFor="price" className="block text-sm font-semibold text-ink mb-2">
-            Price {selectedItem ? `(per ${selectedItem.unit})` : ""}
+            Price {unit ? `(per ${UNIT_OPTIONS.find((u) => u.value === unit)?.label.toLowerCase() ?? unit})` : ""}
           </label>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-faint text-[15px]">₱</span>
@@ -371,7 +418,7 @@ export default function ReportScreen() {
         <button
           type="submit"
           disabled={!canSubmit}
-          className="mt-1 w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px] disabled:opacity-40"
+          className="mt-1 w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px] disabled:opacity-40 transition-opacity duration-200"
         >
           {submitting ? "Submitting..." : `Submit report · +${POINTS_FOR_REPORT} pts`}
         </button>

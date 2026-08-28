@@ -101,7 +101,6 @@ export default function ReportScreen() {
     itemId &&
     marketId &&
     isValidPrice &&
-    productName.trim() !== "" &&
     unit &&
     isValidQuantity &&
     !submitting;
@@ -112,10 +111,14 @@ export default function ReportScreen() {
     return { normalizedUnit, normalizedPrice };
   }, [unit, isValidPrice, isValidQuantity, priceValue, quantityValue]);
 
-  // Guaranteed points for a valid submission, shown up front so the
-  // person knows what they're earning before they tap submit. Photo and
-  // the verification bonus are separate, called out on their own.
-  const baseGuaranteedPoints = POINTS_FOR_REPORT + POINTS_FOR_PRODUCT_NAME;
+  // Live points preview: +5 is always guaranteed, +5 more if a product
+  // name is added, +10 more if a photo is added. Reporter name doesn't
+  // affect points. Verification bonus (+10) is awarded after submit and
+  // isn't part of this pre-submit estimate.
+  const currentPoints =
+    POINTS_FOR_REPORT +
+    (productName.trim() ? POINTS_FOR_PRODUCT_NAME : 0) +
+    (photoFile ? POINTS_FOR_PHOTO : 0);
 
   function handlePhotoSelect(file: File | null) {
     setPhotoFile(file);
@@ -127,7 +130,6 @@ export default function ReportScreen() {
     e.preventDefault();
     if (!canSubmit) {
       if (!isValidPrice) setError("Enter a valid price greater than ₱0.");
-      else if (productName.trim() === "") setError("Add the specific product name.");
       else if (!isValidQuantity) setError("Enter a valid quantity greater than 0.");
       return;
     }
@@ -338,7 +340,7 @@ export default function ReportScreen() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label htmlFor="productName" className="block text-sm font-semibold text-ink">
-                Product name
+                Product name <span className="text-ink-faint font-normal">(optional)</span>
               </label>
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-palengke-gold-dark">
                 <Award size={13} strokeWidth={2.2} />+{POINTS_FOR_PRODUCT_NAME} pts
@@ -482,7 +484,7 @@ export default function ReportScreen() {
           disabled={!canSubmit}
           className="mt-1 w-full py-3.5 rounded-pill bg-palengke-green text-white font-semibold text-[15px] min-h-[48px] disabled:opacity-40 transition-opacity duration-200"
         >
-          {submitting ? "Submitting..." : `Submit report · +${baseGuaranteedPoints} pts`}
+          {submitting ? "Submitting..." : `Submit report · +${currentPoints} pts`}
         </button>
       </form>
     </div>

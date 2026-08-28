@@ -225,7 +225,7 @@ export default function ProfileScreen() {
           {multiplierEligible && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-palengke-green rounded-pill px-3 py-1.5 w-fit mb-3">
               <Flame size={13} strokeWidth={2.4} />
-              1.5x points active this week, you were Top 3 last week!
+              Top 3 last week. 1.5x points multiplier this week!
             </div>
           )}
 
@@ -248,7 +248,7 @@ export default function ProfileScreen() {
                 </div>
               ) : (
                 <p className="text-ink-faint text-xs">
-                  You've reached the highest tier — thank you for keeping prices honest.
+                  You've reached the highest tier - thank you for keeping prices honest.
                 </p>
               )}
             </div>

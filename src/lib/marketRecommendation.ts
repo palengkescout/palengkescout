@@ -36,8 +36,6 @@ export async function getMarketRecommendation(
     .eq("status", "verified");
   if (error) throw error;
 
-  // Cheapest verified price per (market, item) — a basket total should use
-  // the best confirmed price seen at that market, not just any report.
   const cheapestByMarketItem = new Map<string, number>();
   for (const row of data ?? []) {
     const key = `${row.market_id}:${row.item_id}`;
@@ -65,8 +63,6 @@ export async function getMarketRecommendation(
     return { market, totalCost, itemsFound, itemsMissing, distanceKm, score: 0 };
   });
 
-  // Only rank markets that have at least one confirmed price for the list —
-  // a market with zero matching prices isn't a meaningful comparison point.
   const comparable = results.filter((r) => r.itemsFound > 0);
   if (comparable.length === 0) {
     return { ranked: results, best: null, aiExplanation: null };
@@ -96,11 +92,6 @@ export async function getMarketRecommendation(
   return { ranked, best, aiExplanation };
 }
 
-/**
- * Calls a Supabase Edge Function (server-side) so the LLM API key never
- * reaches the browser. Returns null quietly on any failure — the numeric
- * recommendation above is already useful without the explanation.
- */
 async function fetchAiExplanation(
   ranked: MarketBasketResult[],
   listSize: number

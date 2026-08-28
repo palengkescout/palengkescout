@@ -61,12 +61,6 @@ export interface SavedLocation {
   lng: number;
 }
 
-/**
- * Reads the user's pinned map location. Uses maybeSingle() rather than
- * single() — an account with no profiles row yet (e.g. one created before
- * the profile auto-creation trigger existed) should read as "no location
- * saved" instead of throwing and breaking the whole page.
- */
 export async function getUserLocation(userId: string): Promise<SavedLocation | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   const { data, error } = await supabase
@@ -81,9 +75,6 @@ export async function getUserLocation(userId: string): Promise<SavedLocation | n
 
 export async function setUserLocation(userId: string, lat: number, lng: number): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
-  // Upsert instead of a plain update — if this account somehow still has no
-  // profiles row (see migration 005), saving a location shouldn't silently
-  // fail; it should create the row.
   const { error } = await supabase
     .from("profiles")
     .upsert({ id: userId, location_lat: lat, location_lng: lng }, { onConflict: "id" });

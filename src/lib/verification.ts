@@ -1,7 +1,7 @@
 import type { PriceStatus } from "../types";
 
-export const PRICE_FLAG_PCT = 0.5; // more than 50% off today's verified price = flagged for review
-export const CONFIRMATIONS_NEEDED = 3; // distinct reporters (including this one) needed to verify a price today
+export const PRICE_FLAG_PCT = 0.5;
+export const CONFIRMATIONS_NEEDED = 3;
 
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
 

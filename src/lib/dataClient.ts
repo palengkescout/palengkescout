@@ -8,6 +8,7 @@ import {
   POINTS_FOR_REPORT,
   POINTS_FOR_VERIFICATION,
 } from "./points";
+import { isValidProductName } from "./productName";
 import { evaluateReportStatus } from "./verification";
 import { normalizeQuantity } from "./units";
 import { isEligibleForMultiplier } from "./leaderboard";
@@ -291,9 +292,16 @@ async function uploadPhotoToSupabase(file: File): Promise<string> {
 }
 
 export async function reportPrice(input: ReportPriceInput): Promise<ReportPriceResult> {
+  // Fetch the item name server-side so the product-name bonus can't be
+  // earned by bypassing the UI (e.g. hitting reportPrice directly with a
+  // junk string like "aaaaa"). Same isValidProductName rule the form
+  // uses for its live preview.
+  const reportedItem = await getItem(input.itemId);
+  const productNameCounts = isValidProductName(input.productName, reportedItem?.name);
+
   const baseline =
     POINTS_FOR_REPORT +
-    (input.productName.trim() ? POINTS_FOR_PRODUCT_NAME : 0) +
+    (productNameCounts ? POINTS_FOR_PRODUCT_NAME : 0) +
     (input.photoFile ? POINTS_FOR_PHOTO : 0);
   const multiplierApplied = input.userId ? await isEligibleForMultiplier(input.userId) : false;
   const baselinePoints = multiplierApplied ? Math.round(baseline * 1.5) : baseline;
@@ -706,6 +714,12 @@ export async function deleteMyReport(reportId: string, userId: string): Promise<
     if (currentError) throw currentError;
     if (current.user_id !== userId) throw new Error("You can only delete your own reports.");
 
+    // Figure out how many points to claw back, but DON'T record anything
+    // yet. Points should only be removed once the delete actually
+    // succeeds — recording the clawback first (the old order) meant a
+    // failed delete (e.g. the price_reports/point_events FK constraint)
+    // still silently drained points on every retry, with the report
+    // never actually going away.
     let pointsClawedBack = 0;
     if (current.status !== "verified") {
       const { data: events, error: eventsError } = await supabase
@@ -714,12 +728,10 @@ export async function deleteMyReport(reportId: string, userId: string): Promise<
         .eq("price_report_id", reportId);
       if (eventsError) throw eventsError;
       pointsClawedBack = (events ?? []).reduce((sum, e) => sum + e.points, 0);
-
-      if (pointsClawedBack > 0) {
-        await recordPoints({ userId, points: -pointsClawedBack, reason: "report" });
-      }
     }
 
+    // Delete FIRST. If this throws (RLS, FK, anything else), we stop
+    // here and no points are touched.
     const { error: deleteError } = await supabase
       .from("price_reports")
       .delete()
@@ -727,11 +739,16 @@ export async function deleteMyReport(reportId: string, userId: string): Promise<
       .eq("user_id", userId);
     if (deleteError) throw deleteError;
 
+    if (pointsClawedBack > 0) {
+      await recordPoints({ userId, points: -pointsClawedBack, reason: "report" });
+    }
+
     const totalPoints = await getTotalPoints(userId);
     return { pointsClawedBack, totalPoints };
   }
 
-  // Mock/local-dev branch.
+  // Mock/local-dev branch — already deletes via saveMockReports(updated)
+  // before recording points, so no reordering needed here.
   const reports = loadMockReports();
   const target = reports.find((r) => r.id === reportId && r.userId === userId);
   if (!target) throw new Error("Report not found.");

@@ -7,6 +7,7 @@ import ReportSkeleton from "../components/ReportSkeleton";
 import { listItems, listMarkets, reportPrice } from "../lib/dataClient";
 import { getItemEmoji } from "../lib/categoryIcons";
 import { POINTS_FOR_PHOTO, POINTS_FOR_PRODUCT_NAME, POINTS_FOR_REPORT, POINTS_FOR_VERIFICATION } from "../lib/points";
+import { isValidProductName } from "../lib/productName";
 import { UNIT_OPTIONS, normalizeQuantity } from "../lib/units";
 import { useAuth } from "../lib/authContext";
 import { RateLimitError } from "../lib/rateLimit";
@@ -111,13 +112,19 @@ export default function ReportScreen() {
     return { normalizedUnit, normalizedPrice };
   }, [unit, isValidPrice, isValidQuantity, priceValue, quantityValue]);
 
-  // Live points preview: +5 is always guaranteed, +5 more if a product
-  // name is added, +10 more if a photo is added. Reporter name doesn't
-  // affect points. Verification bonus (+10) is awarded after submit and
-  // isn't part of this pre-submit estimate.
+  // A product name only counts toward the +5 bonus if it passes the
+  // shared validity check (long enough, has letters, isn't just the item
+  // name repeated back, etc). Same rule dataClient.ts enforces server-side.
+  const productNameEntered = productName.trim() !== "";
+  const productNameCounts = productNameEntered && isValidProductName(productName, selectedItem?.name);
+
+  // Live points preview: +5 is always guaranteed, +5 more if a *valid*
+  // product name is added, +10 more if a photo is added. Reporter name
+  // doesn't affect points. Verification bonus (+10) is awarded after
+  // submit and isn't part of this pre-submit estimate.
   const currentPoints =
     POINTS_FOR_REPORT +
-    (productName.trim() ? POINTS_FOR_PRODUCT_NAME : 0) +
+    (productNameCounts ? POINTS_FOR_PRODUCT_NAME : 0) +
     (photoFile ? POINTS_FOR_PHOTO : 0);
 
   function handlePhotoSelect(file: File | null) {
@@ -354,6 +361,11 @@ export default function ReportScreen() {
               onChange={(e) => setProductName(e.target.value)}
               className="w-full bg-white rounded-card shadow-card px-4 py-3.5 text-[15px] outline-none min-h-[48px]"
             />
+            {productNameEntered && !productNameCounts && (
+              <p className="text-ink-faint text-xs mt-2 px-1">
+                Add a bit more detail (brand, size, variant) to earn the bonus.
+              </p>
+            )}
           </div>
 
           {}

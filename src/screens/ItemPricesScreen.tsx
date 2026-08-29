@@ -30,6 +30,13 @@ interface RowWithDistance {
   distanceKm: number | null;
 }
 
+/**
+ * Ranks by normalizedPrice, not the raw reported price — two reports for
+ * the same item can legitimately be entered in different units/quantities
+ * (₱45 for 500g vs ₱90 for 1kg), and normalizedPrice is what puts them on
+ * the same footing. Comparing raw `price` here would silently rank by
+ * whatever quantity happened to be typed in, not the actual rate.
+ */
 function rankBySmartScore(
   candidates: RowWithDistance[],
   hasLocation: boolean
@@ -37,7 +44,7 @@ function rankBySmartScore(
   if (!hasLocation || candidates.length < 2) {
     return { sorted: candidates, topId: null };
   }
-  const prices = candidates.map((c) => c.row.price);
+  const prices = candidates.map((c) => c.row.normalizedPrice);
   const distances = candidates.filter((c) => c.distanceKm !== null).map((c) => c.distanceKm as number);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
@@ -46,7 +53,7 @@ function rankBySmartScore(
 
   const scored = candidates.map((c) => ({
     ...c,
-    score: computeSmartScore(c.row.price, minPrice, maxPrice, c.distanceKm, minDist, maxDist),
+    score: computeSmartScore(c.row.normalizedPrice, minPrice, maxPrice, c.distanceKm, minDist, maxDist),
   }));
   scored.sort((a, b) => a.score - b.score);
   return { sorted: scored, topId: scored[0]?.row.id ?? null };
@@ -135,14 +142,19 @@ export default function ItemPricesScreen() {
 
   const sortedRows = useMemo<RowWithDistance[]>(() => {
     if (sort === "smart") {
-      return [...smartRankedNonFlagged, ...[...flagged].sort((a, b) => a.row.price - b.row.price)];
+      return [
+        ...smartRankedNonFlagged,
+        ...[...flagged].sort((a, b) => a.row.normalizedPrice - b.row.normalizedPrice),
+      ];
     }
     if (sort === "recent") {
       return [...rowsWithDistance].sort(
         (a, b) => new Date(b.row.reportedAt).getTime() - new Date(a.row.reportedAt).getTime()
       );
     }
-    return [...rowsWithDistance].sort((a, b) => a.row.price - b.row.price);
+    // "price" — compare on normalizedPrice so a ₱45/500g report and a
+    // ₱90/1kg report (the same rate) sort correctly relative to each other.
+    return [...rowsWithDistance].sort((a, b) => a.row.normalizedPrice - b.row.normalizedPrice);
   }, [sort, rowsWithDistance, smartRankedNonFlagged, flagged]);
 
   const itemEmoji = getItemEmoji(item?.name ?? "", item?.category ?? "");

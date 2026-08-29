@@ -16,6 +16,11 @@ import { enforceReportCooldown } from "./rateLimit";
 import type { Item, Market, MyReportRow, PriceReport, PriceRowData, PriceStatus } from "../types";
 
 const STORAGE_KEY = "palengkescout_reports_v1";
+const FLAGS_STORAGE_KEY = "palengkescout_flags_v1";
+
+// How many distinct users flagging the same report before it's marked
+// "flagged" and sent for AI review.
+const FLAGS_TO_TRIGGER_REVIEW = 2;
 
 function loadMockReports(): PriceReport[] {
   try {
@@ -30,6 +35,22 @@ function loadMockReports(): PriceReport[] {
 
 function saveMockReports(reports: PriceReport[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+}
+
+// Mock flags are stored as `${reportId}:${userId}` strings — enough to
+// dedupe and count without needing a second local "table".
+function loadMockFlags(): string[] {
+  try {
+    const raw = localStorage.getItem(FLAGS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as string[];
+  } catch {
+    // ignore corrupt storage
+  }
+  return [];
+}
+
+function saveMockFlags(flags: string[]) {
+  localStorage.setItem(FLAGS_STORAGE_KEY, JSON.stringify(flags));
 }
 
 export async function listItems(): Promise<Item[]> {
@@ -767,4 +788,97 @@ export async function deleteMyReport(reportId: string, userId: string): Promise<
       : await getTotalPoints(userId);
 
   return { pointsClawedBack, totalPoints };
+}
+
+// Fire-and-forget: kicks off AI moderation for a newly-flagged report
+// without making the person's tap wait on an OpenAI round trip. Failures
+// are logged, not thrown — moderation is a nice-to-have layered on top
+// of a flag that already recorded successfully.
+function triggerAiModeration(reportId: string) {
+  if (!supabase) return;
+  supabase.functions
+    .invoke("moderate-flagged-report", { body: { reportId } })
+    .catch((err) => console.error("Could not trigger AI moderation:", err));
+}
+
+export interface FlagReportResult {
+  totalFlags: number;
+  nowFlagged: boolean; // true if THIS flag was the one that crossed the threshold
+}
+
+/**
+ * Records that `userId` is flagging `reportId` as suspicious. Once a
+ * report accumulates FLAGS_TO_TRIGGER_REVIEW distinct flags, its status
+ * flips to "flagged" and AI moderation is triggered — this is currently
+ * the ONLY path that leads to AI review (not tied to the automatic
+ * price-outlier detection in evaluateReportStatus, which still sets
+ * "flagged" independently for outlier pricing but doesn't call the AI).
+ */
+export async function flagPriceReport(reportId: string, userId: string): Promise<FlagReportResult> {
+  if (isSupabaseConfigured && supabase) {
+    const { error: insertError } = await supabase
+      .from("price_report_flags")
+      .insert({ price_report_id: reportId, user_id: userId });
+    // 23505 = unique_violation — this user already flagged this report.
+    // Treat that as a harmless no-op rather than an error.
+    if (insertError && insertError.code !== "23505") throw insertError;
+
+    const { count, error: countError } = await supabase
+      .from("price_report_flags")
+      .select("id", { count: "exact", head: true })
+      .eq("price_report_id", reportId);
+    if (countError) throw countError;
+
+    const totalFlags = count ?? 0;
+    let nowFlagged = false;
+
+    if (totalFlags >= FLAGS_TO_TRIGGER_REVIEW) {
+      const { data: current, error: currentError } = await supabase
+        .from("price_reports")
+        .select("status")
+        .eq("id", reportId)
+        .single();
+      if (currentError) throw currentError;
+
+      // Only act if this is the transition into "flagged" — avoids
+      // re-triggering AI review every time a report that's already
+      // flagged (or already resolved) gets an extra flag.
+      if (current.status !== "flagged") {
+        const { error: updateError } = await supabase
+          .from("price_reports")
+          .update({ status: "flagged" })
+          .eq("id", reportId);
+        if (updateError) throw updateError;
+        nowFlagged = true;
+        triggerAiModeration(reportId);
+      }
+    }
+
+    return { totalFlags, nowFlagged };
+  }
+
+  // Mock/local-dev branch — flags tracked as "reportId:userId" strings in
+  // localStorage. No AI call here since there's no edge function to hit
+  // without a real Supabase backend.
+  const flags = loadMockFlags();
+  const key = `${reportId}:${userId}`;
+  if (!flags.includes(key)) {
+    flags.push(key);
+    saveMockFlags(flags);
+  }
+
+  const totalFlags = flags.filter((f) => f.startsWith(`${reportId}:`)).length;
+  let nowFlagged = false;
+
+  if (totalFlags >= FLAGS_TO_TRIGGER_REVIEW) {
+    const reports = loadMockReports();
+    const target = reports.find((r) => r.id === reportId);
+    if (target && target.status !== "flagged") {
+      target.status = "flagged";
+      saveMockReports(reports);
+      nowFlagged = true;
+    }
+  }
+
+  return { totalFlags, nowFlagged };
 }

@@ -19,12 +19,30 @@ export default function PriceRow({ row }: { row: PriceRowData }) {
 
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-ink truncate">{row.market.name}</p>
-        <p className="text-ink-faint text-xs mt-0.5">
+
+        {/* Product name — the specific brand/variant this price is for.
+            Sits directly under the market name since it's the most
+            report-specific detail; weight (not color) sets it apart from
+            the market metadata line below. */}
+        {row.productName && (
+          <p className="text-ink-soft text-[13px] font-medium truncate mt-0.5">{row.productName}</p>
+        )}
+
+        <p className="text-ink-faint text-xs mt-0.5 truncate">
           {marketTypeLabel(row.market.type)} · {row.market.barangay}
         </p>
-        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-          <FreshnessBadge reportedAt={row.reportedAt} />
-          <StatusBadge status={row.status} />
+
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <FreshnessBadge reportedAt={row.reportedAt} />
+            <StatusBadge status={row.status} />
+          </div>
+
+          {/* Reporter attribution — lowest priority in the hierarchy, so it
+              stays small and muted rather than competing with the badges. */}
+          <p className="text-ink-faint text-[11px] truncate shrink-0 max-w-[38%]">
+            by {row.reporterName}
+          </p>
         </div>
       </div>
 

@@ -223,9 +223,14 @@ export default function ProfileScreen() {
           </div>
 
           {multiplierEligible && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-palengke-green rounded-pill px-3 py-1.5 w-fit mb-3">
-              <Flame size={13} strokeWidth={2.4} />
-              Top 3 last week. 1.5x points multiplier this week!
+            <div className="flex items-center gap-2.5 rounded-xl bg-palengke-gold-dark/10 px-3 py-2 w-fit mb-3">
+              <div className="w-7 h-7 rounded-full bg-palengke-gold-dark/15 flex items-center justify-center shrink-0">
+                <Flame size={14} className="text-palengke-gold-dark" strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-ink leading-tight">1.5× points this week</p>
+                <p className="text-[11px] text-ink-faint leading-tight">Top 3 finisher last week</p>
+              </div>
             </div>
           )}
 

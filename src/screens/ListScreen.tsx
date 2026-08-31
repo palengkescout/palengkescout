@@ -148,7 +148,7 @@ export default function ListScreen() {
                 {location ? "Using your saved location" : "No location set"}
               </p>
               <p className="text-ink-faint text-xs truncate">
-                {location ? "Distance to markets is estimated from this" : "Set it to see distance to markets"}
+                {location ? "See your distance to market" : "Set it to see distance to markets"}
               </p>
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function ListScreen() {
         ) : loadError ? null : rows.length === 0 ? (
           <EmptyState
             title="Your list is empty"
-            description='Open any item&apos;s price page and tap "Add to my list" to start building your basket.'
+            description='Open any item&apos;s price page and tap "Add to my list" to add items.'
             actionLabel="Browse items"
             onAction={() => navigate("/")}
           />

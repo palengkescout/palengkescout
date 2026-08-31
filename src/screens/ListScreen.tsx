@@ -1,8 +1,20 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, MapPin, Minus, Plus, Trash2, Trophy, Sparkles, TriangleAlert, ChevronRight } from "lucide-react";
+import {
+  LogIn,
+  MapPin,
+  Minus,
+  Plus,
+  Trash2,
+  Trophy,
+  Sparkles,
+  TriangleAlert,
+  ChevronRight,
+  Navigation,
+} from "lucide-react";
 import TopBar from "../components/TopBar";
 import EmptyState from "../components/EmptyState";
+import RouteMap from "../components/RouteMap";
 import { useAuth } from "../lib/authContext";
 import { listMarkets } from "../lib/dataClient";
 import {
@@ -29,6 +41,7 @@ export default function ListScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [computing, setComputing] = useState(false);
+  const [showRoute, setShowRoute] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -67,6 +80,7 @@ export default function ListScreen() {
     await removeFromShoppingList(rowId);
     setRows((prev) => prev.filter((r) => r.id !== rowId));
     setRecommendation(null);
+    setShowRoute(false);
   }
 
   async function handleQuantity(rowId: string, delta: number) {
@@ -76,11 +90,13 @@ export default function ListScreen() {
     setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, quantity: nextQuantity } : r)));
     await updateShoppingListQuantity(rowId, nextQuantity);
     setRecommendation(null);
+    setShowRoute(false);
   }
 
   async function handleFindBestMarket() {
     if (!location) return;
     setComputing(true);
+    setShowRoute(false);
     try {
       const result = await getMarketRecommendation(rows, markets, location);
       setRecommendation(result);
@@ -216,9 +232,20 @@ export default function ListScreen() {
 
             {recommendation && recommendation.best && (
               <div className="bg-white rounded-card shadow-card p-4">
-                <div className="flex items-center gap-1.5 mb-3">
-                  <Trophy size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
-                  <p className="font-semibold text-ink text-sm">Best overall pick</p>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <Trophy size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
+                    <p className="font-semibold text-ink text-sm">Best overall pick</p>
+                  </div>
+                  {location && (
+                    <button
+                      onClick={() => setShowRoute((v) => !v)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-palengke-green"
+                    >
+                      <Navigation size={12} strokeWidth={2.4} />
+                      {showRoute ? "Hide route" : "Show route"}
+                    </button>
+                  )}
                 </div>
 
                 <p className="font-display text-lg text-ink mb-0.5">{recommendation.best.market.name}</p>
@@ -251,6 +278,18 @@ export default function ListScreen() {
                   <div className="flex items-start gap-2 bg-cream-soft rounded-xl p-3 mb-3">
                     <Sparkles size={15} className="text-palengke-gold-dark shrink-0 mt-0.5" strokeWidth={2} />
                     <p className="text-ink-soft text-xs leading-relaxed">{recommendation.aiExplanation}</p>
+                  </div>
+                )}
+
+                {showRoute && location && (
+                  <div className="mb-3">
+                    <RouteMap
+                      fromLat={location.lat}
+                      fromLng={location.lng}
+                      toLat={recommendation.best.market.latitude}
+                      toLng={recommendation.best.market.longitude}
+                      marketName={recommendation.best.market.name}
+                    />
                   </div>
                 )}
 

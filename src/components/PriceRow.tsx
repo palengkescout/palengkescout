@@ -52,33 +52,31 @@ export default function PriceRow({ row }: { row: PriceRowData }) {
           {marketTypeLabel(row.market.type)} · {row.market.barangay}
         </p>
 
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex items-center flex-wrap min-w-0">
-            <div className="mr-1.5">
-              <FreshnessBadge reportedAt={row.reportedAt} />
-            </div>
-            <StatusBadge status={row.status} />
+        <div className="flex items-center flex-wrap mt-2">
+          <div className="mr-1.5">
+            <FreshnessBadge reportedAt={row.reportedAt} />
           </div>
+          <StatusBadge status={row.status} />
+        </div>
 
-          <div className="flex items-center shrink-0">
-            <p className="text-ink-faint text-[11px] truncate max-w-[80px] mr-0.5">by {row.reporterName}</p>
-            {!isOwnReport && (
-              <button
-                type="button"
-                onClick={handleFlag}
-                disabled={flagging || flagged}
-                aria-label={flagged ? "Reported" : "Report this price"}
-                className="w-6 h-6 -mr-1 rounded-full flex items-center justify-center active:bg-cream-soft"
-              >
-                <Flag
-                  size={12}
-                  strokeWidth={2.2}
-                  className={flagged ? "text-fresh-red" : "text-ink-faint"}
-                  fill={flagged ? "currentColor" : "none"}
-                />
-              </button>
-            )}
-          </div>
+        <div className="flex items-center justify-between mt-1.5">
+          <p className="text-ink-faint text-[11px] truncate">by {row.reporterName}</p>
+          {!isOwnReport && (
+            <button
+              type="button"
+              onClick={handleFlag}
+              disabled={flagging || flagged}
+              aria-label={flagged ? "Reported" : "Report this price"}
+              className="w-6 h-6 -mr-1 shrink-0 rounded-full flex items-center justify-center active:bg-cream-soft"
+            >
+              <Flag
+                size={12}
+                strokeWidth={2.2}
+                className={flagged ? "text-fresh-red" : "text-ink-faint"}
+                fill={flagged ? "currentColor" : "none"}
+              />
+            </button>
+          )}
         </div>
       </div>
 

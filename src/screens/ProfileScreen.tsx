@@ -223,13 +223,13 @@ export default function ProfileScreen() {
           </div>
 
           {multiplierEligible && (
-            <div className="flex items-center gap-2.5 rounded-xl bg-palengke-gold-dark/10 px-3 py-2 w-fit mb-3">
-              <div className="w-7 h-7 rounded-full bg-palengke-gold-dark/15 flex items-center justify-center shrink-0">
-                <Flame size={14} className="text-palengke-gold-dark" strokeWidth={2.2} />
+            <div className="flex items-center gap-2.5 bg-palengke-gold/10 rounded-xl px-3.5 py-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-palengke-gold/20 flex items-center justify-center shrink-0">
+                <Flame size={15} className="text-palengke-gold-dark" strokeWidth={2.4} />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-ink leading-tight">1.5× points this week</p>
-                <p className="text-[11px] text-ink-faint leading-tight">Top 3 finisher last week</p>
+                <p className="text-sm font-semibold text-ink leading-tight">1.5x points this week</p>
+                <p className="text-ink-faint text-xs mt-0.5">You were in last week's Top 3</p>
               </div>
             </div>
           )}
@@ -350,18 +350,18 @@ export default function ProfileScreen() {
         </div>
 
         <div className="bg-white rounded-card shadow-card p-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Trophy size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
               <p className="font-semibold text-ink text-sm">Leaderboard</p>
             </div>
-            <div className="flex gap-1">
+            <div className="flex bg-cream-soft rounded-pill p-1 shrink-0">
               {(["week", "month"] as LeaderboardPeriod[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold min-h-[28px] ${
-                    period === p ? "bg-palengke-green text-white" : "bg-cream-soft text-ink-faint"
+                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap min-h-[28px] transition-colors ${
+                    period === p ? "bg-palengke-green text-white shadow-sm" : "text-ink-faint"
                   }`}
                 >
                   {p === "week" ? "This week" : "This month"}
@@ -404,18 +404,18 @@ export default function ProfileScreen() {
         </div>
 
         <div className="bg-white rounded-card shadow-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Crown size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
               <p className="font-semibold text-ink text-sm">Hall of Fame</p>
             </div>
-            <div className="flex gap-1">
+            <div className="flex bg-cream-soft rounded-pill p-1 shrink-0">
               {(["week", "month"] as LeaderboardPeriod[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setHofPeriod(p)}
-                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold min-h-[28px] ${
-                    hofPeriod === p ? "bg-palengke-green text-white" : "bg-cream-soft text-ink-faint"
+                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap min-h-[28px] transition-colors ${
+                    hofPeriod === p ? "bg-palengke-green text-white shadow-sm" : "text-ink-faint"
                   }`}
                 >
                   {p === "week" ? "Weekly" : "Monthly"}

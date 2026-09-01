@@ -350,17 +350,17 @@ export default function ProfileScreen() {
         </div>
 
         <div className="bg-white rounded-card shadow-card p-4">
-          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1.5 shrink-0">
               <Trophy size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
               <p className="font-semibold text-ink text-sm">Leaderboard</p>
             </div>
-            <div className="flex bg-cream-soft rounded-pill p-1 shrink-0">
+            <div className="flex bg-cream-soft rounded-pill p-0.5 shrink-0">
               {(["week", "month"] as LeaderboardPeriod[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap min-h-[28px] transition-colors ${
+                  className={`px-2 py-1 rounded-pill text-[11px] font-semibold whitespace-nowrap transition-colors ${
                     period === p ? "bg-palengke-green text-white shadow-sm" : "text-ink-faint"
                   }`}
                 >
@@ -404,17 +404,17 @@ export default function ProfileScreen() {
         </div>
 
         <div className="bg-white rounded-card shadow-card p-4">
-          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1.5 shrink-0">
               <Crown size={16} className="text-palengke-gold-dark" strokeWidth={2.2} />
               <p className="font-semibold text-ink text-sm">Hall of Fame</p>
             </div>
-            <div className="flex bg-cream-soft rounded-pill p-1 shrink-0">
+            <div className="flex bg-cream-soft rounded-pill p-0.5 shrink-0">
               {(["week", "month"] as LeaderboardPeriod[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setHofPeriod(p)}
-                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap min-h-[28px] transition-colors ${
+                  className={`px-2 py-1 rounded-pill text-[11px] font-semibold whitespace-nowrap transition-colors ${
                     hofPeriod === p ? "bg-palengke-green text-white shadow-sm" : "text-ink-faint"
                   }`}
                 >

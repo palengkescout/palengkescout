@@ -52,22 +52,18 @@ export default function PriceRow({ row }: { row: PriceRowData }) {
           {marketTypeLabel(row.market.type)} · {row.market.barangay}
         </p>
 
-        <div className="flex items-center flex-wrap mt-2">
-          <div className="mr-1.5">
-            <FreshnessBadge reportedAt={row.reportedAt} />
-          </div>
-          <StatusBadge status={row.status} />
-        </div>
+        <p className="text-ink-faint text-[11px] mt-1 truncate">by {row.reporterName}</p>
 
-        <div className="flex items-center justify-between mt-1.5">
-          <p className="text-ink-faint text-[11px] truncate">by {row.reporterName}</p>
+        <div className="flex items-center flex-wrap gap-1.5 mt-2.5">
+          <FreshnessBadge reportedAt={row.reportedAt} />
+          <StatusBadge status={row.status} />
           {!isOwnReport && (
             <button
               type="button"
               onClick={handleFlag}
               disabled={flagging || flagged}
               aria-label={flagged ? "Reported" : "Report this price"}
-              className="w-6 h-6 -mr-1 shrink-0 rounded-full flex items-center justify-center active:bg-cream-soft"
+              className="w-6 h-6 -my-1 shrink-0 rounded-full flex items-center justify-center active:bg-cream-soft"
             >
               <Flag
                 size={12}
